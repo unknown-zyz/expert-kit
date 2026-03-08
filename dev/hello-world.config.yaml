@@ -5,7 +5,7 @@ inference:
   model_name: ds-tiny
 
 db:
-  db_dsn: postgres://dev:dev@localhost:5432/dev
+  db_dsn: postgres://dev:dev@<crater_ip>/dev
   max_conn_size: 32
 
 weight:
@@ -13,7 +13,7 @@ weight:
     addr: http://localhost:6543
   cache:
     Fs:
-      path: /tmp/expert-kit/cache
+      path: /home/zhangyz/cache
 
 worker:
   id: local-dev
@@ -21,6 +21,7 @@ worker:
   broadcast: 127.0.0.1
   ports:
     main: 51234
+  device: cpu
 
 controller:
   listen: 0.0.0.0

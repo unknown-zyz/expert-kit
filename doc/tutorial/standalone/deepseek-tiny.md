@@ -26,7 +26,7 @@ export EK_CONFIG="$(realpath ./dev/hello-world.config.yaml)"
 # download libtorch from https://pytorch.org/, and place it in the vendor directory of expert-kit
 # Mac: https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.7.0.zip
 # Linux: https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcpu.zip
-wget https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.7.0.zip -O /tmp/libtorch.zip
+wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcpu.zip -O /tmp/libtorch.zip
 unzip /tmp/libtorch.zip -d ./vendor/
 
 
@@ -36,6 +36,10 @@ git lfs fetch --all  # download the ds-tiny weight
 git lfs install      # initialize git-lfs if not done yet
 git lfs checkout     # checkout the ds-tiny weight files
 
+# clone submodel ggml
+git submodule init
+git submodule update --recursive
+
 cargo build --release
 uv sync
 ```
@@ -43,8 +47,11 @@ uv sync
 2. run weight server and meta db
 
 ```bash
-# run meta db
-docker-compose -f dev/meta-db.docker-compose.yaml up -d
+# activate virtual environment
+source .venv/bin/activate
+
+# run meta db (deploy in Crater, skip)
+docker compose -f dev/meta-db.docker-compose.yaml up -d
 
 # run weight server
 cargo run --release --bin ek-cli weight-server --model "${DS_TINY_ROOT}"
