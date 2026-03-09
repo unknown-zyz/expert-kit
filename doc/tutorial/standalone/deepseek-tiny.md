@@ -41,7 +41,7 @@ git submodule init
 git submodule update --recursive
 
 cargo build --release
-uv sync --extra 128
+uv sync --extra 130
 ```
 
 2. run weight server and meta db

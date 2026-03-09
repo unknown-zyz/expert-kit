@@ -23,23 +23,21 @@ dependencies = [
     "ruff>=0.9.10",
     "safetensors>=0.5.3",
     "sympy>=1.14.0",
-    "torch==2.7.0",
-    "transformers[cu128]>=4.51.3",
+    "transformers>=4.51.3",
     "uvloop>=0.21.0",
 ]
 
 [project.optional-dependencies]
-cpu = ["torch==2.7.0"]
-cu128 = ["torch==2.7.0"]
-
+cpu = ["torch==2.10.0"]
+cu130 = ["torch==2.10.0"]
 
 [dependency-groups]
 dev = ["ruff>=0.9.10"]
 
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'", extra = "cpu" },
-    { index = "pytorch-cu128", marker = "sys_platform != 'darwin'", extra = "cu128" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'", extra = "cpu"},
+    { index = "pytorch-cu130", marker = "sys_platform != 'darwin'", extra = "cu130"},
 ]
 [[tool.uv.index]]
 name = "tuna"
@@ -51,9 +49,9 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.uv]
-conflicts = [[{ extra = "cpu" }, { extra = "cu128" }]]
+conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
