@@ -114,7 +114,7 @@ def intercept_moe(
             print(f"[EK-Inference] Layer {self.layer_id} sending to MoE:")
             print(f"  - Shape: {list(hidden_states.shape)}")
             print(f"  - Dtype: {hidden_states.dtype}")
-            print(f"  - Data Size: {total_bytes / 1024 / 1024:.2f} MB")
+            print(f"  - Data Size: {total_bytes / 1024:.2f} KB")
 
             outputs = self.client.forward_expert(
                 expert_ids=expert_ids, hidden_state=hidden_states
