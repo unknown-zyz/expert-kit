@@ -1,8 +1,8 @@
 inference:
-  hidden_dim: 16
-  intermediate_dim: 8
+  hidden_dim: 2048
+  intermediate_dim: 768
   instance_name: local-test
-  model_name: ds-tiny
+  model_name: qwen3-30b-a3b
 
 db:
   db_dsn: postgres://dev:dev@<crater_ip>/dev

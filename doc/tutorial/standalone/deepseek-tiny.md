@@ -41,7 +41,7 @@ git submodule init
 git submodule update --recursive
 
 cargo build --release
-uv sync
+uv sync --extra 128
 ```
 
 2. run weight server and meta db
@@ -62,7 +62,7 @@ cargo run --release --bin ek-cli weight-server --model "${DS_TINY_ROOT}"
 ```bash
 cargo run --release --bin ek-cli db migrate
 cargo run --release --bin ek-cli model upsert --name ds-tiny
-cargo run --release --bin ek-cli schedule  static --inventory ./dev/local.inventory.yaml
+cargo run --release --bin ek-cli schedule static --inventory ./dev/local.inventory.yaml
 ```
 
 4. run the frontend controller and backend worker

@@ -55,7 +55,7 @@ else:
 def intercept_moe(
     enable_ek: bool = True,
     ek_addr: str = "localhost:5002",
-    ek_model_name: str = "qwen3",
+    ek_model_name: str = "qwen3-30b-a3b",
 ):
     class InterceptedMoE(nn.Module):
         client: ExpertKitClient = None
@@ -244,7 +244,7 @@ def evaluate_batch(
     output_max_length=64,
     enable_ek=True,
     ek_addr="localhost:5002",
-    ek_model_name="qwen3"
+    ek_model_name="qwen3-30b-a3b"
 ) -> Dict[str, Any]:
     """
     Batch inference with performance profiling.
@@ -393,7 +393,7 @@ def main():
     parser.add_argument(
         "--ek_model_name",
         type=str,
-        default="qwen3",
+        default="qwen3-30b-a3b",
         help="The name of the model used in ExpertKit.",
     )
     parser.add_argument(

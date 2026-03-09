@@ -95,7 +95,7 @@ huggingface-cli download Qwen/Qwen3-30B-A3B --local-dir ${QWEN3_30B_A3B_ROOT}
 
 ```bash
 # Terminal 1: Start the metadata database
-docker-compose -f dev/meta-db.docker-compose.yaml up -d
+# docker-compose -f dev/meta-db.docker-compose.yaml up -d
 
 # Terminal 1: Run the weight server (keep this terminal open)
 cargo run --release --bin ek-cli weight-server --model "${QWEN3_30B_A3B_ROOT}"
@@ -112,7 +112,7 @@ cargo run --release --bin ek-cli db migrate
 cargo run --release --bin ek-cli model upsert --name qwen3-30b-a3b
 
 # Schedule the experts (extract expert info from weight, and assign to worker)
-cargo run --release --bin ek-cli schedule static --inventory ./dev/local.inventory.yaml
+# cargo run --release --bin ek-cli schedule static --inventory ./dev/local.inventory.yaml
 ```
 
 ### 3. Launch the Controller and Worker
@@ -123,6 +123,8 @@ cargo run --release --bin ek-cli controller
 
 # Terminal 3: Start the worker (keep this terminal open)
 cargo run --release --bin ek-cli worker
+
+cargo run --release --bin ek-cli schedule rebalance 
 # Note: After starting the worker, the terminal will display weight loading information
 ```
 
@@ -131,14 +133,14 @@ cargo run --release --bin ek-cli worker
 ```bash
 # Terminal 4: Run an inference test
 # Set up the frontend Python environment
-uv sync
+# uv sync
 
 # Navigate to the testing directory
 cd ek-integration/expertkit_torch/
 
 # Test with a simple script
 python3 -m expertkit_torch.models.qwen3_moe \
-  --model_path "${QWEN3_30B_A3B_ROOT}"
+  --model_path "${QWEN3_30B_A3B_ROOT}" --print_response
 ```
 
 example output:
