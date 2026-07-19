@@ -133,7 +133,7 @@ cargo run --release --bin ek-cli schedule rebalance
 ```bash
 # Terminal 4: Run an inference test
 # Set up the frontend Python environment
-uv sync --extra 130
+uv sync --extra cu130
 
 # Navigate to the testing directory
 cd ek-integration/expertkit_torch/
