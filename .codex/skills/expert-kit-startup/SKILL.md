@@ -74,7 +74,7 @@ If `EK_CONFIG` is not exported, add `--config /path/to/config.yaml` to each comm
 - Weight server: verify it reports the model roots loaded and is listening on `6543` (or the explicitly selected port).
 - Controller: verify `expert kit controller started`, with intra/inter listeners on the configured `5001`/`5002` ports.
 - Worker: verify registration with Controller, model/expert loading, and the configured worker port (`51234` by default).
-- For vLLM, use `EK_ENABLE=1`, `EK_MODE=expert_mode`, `EK_ADDR=localhost:5002`, and `EK_MODEL_NAME=qwen3`; confirm Controller logs show incoming Expert requests and Worker logs show forwarding/activation.
+- For vLLM, use `EK_ENABLE=1`, `EK_MODE=expert_mode`, `EK_ADDR=localhost:5002`, and an `EK_MODEL_NAME` that exactly matches `inference.model_name` and the registered model (for the local Qwen3 config, `qwen3-30b-a3b`); confirm Controller logs show incoming Expert requests and Worker logs show forwarding/activation.
 - Before inference, register the model and schedule experts when the deployment tutorial requires it:
 
   ```bash

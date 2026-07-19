@@ -136,12 +136,14 @@ import os
 
 os.environ["VLLM_MLA_DISABLE"] = "1"
 
-os.environ["EK_ENABLE"] = "0"
-os.environ["EK_MODEL_NAME"] = "qwen3"
+os.environ["EK_ENABLE"] = "1"
+os.environ["EK_MODEL_NAME"] = "qwen3-30b-a3b"
 os.environ["EK_MODE"] = "expert_mode"
 os.environ["EK_ADDR"] = "localhost:5002"
 os.environ["EK_CLIENT_TIMEOUT"] = "2"
 os.environ["EK_DEBUG_MODE"] = "0"
+
+model_root = os.environ["QWEN3_30B_A3B_ROOT"]
 
 prompts = [
     "Hello, my name is",
@@ -149,7 +151,7 @@ prompts = [
 ]
 
 llm = LLM(
-        model="Qwen/Qwen3-30B-A3B",
+        model=model_root,
         trust_remote_code=True,
 
         max_model_len=16,

@@ -1,9 +1,8 @@
 import torch
 import logging
 import torch.nn.functional as F
-from torch import nn
 from torch.nn import Parameter
-from typing import Optional, List, Callable
+from typing import Optional, Callable
 from vllm.model_executor.layers.quantization import QuantizationConfig
 from expertkit_vllm.grpc_client import ExpertKitClient
 from expertkit_vllm.utils.config import collect_ek_client_cfg
@@ -93,6 +92,8 @@ class GrpcExpert(PPMissingLayer):
         self.custom_routing_function = custom_routing_function
         self.scoring_func = scoring_func
         self.e_score_correction_bias = e_score_correction_bias
+
+        self.is_internal_router = False
 
         if self.debug_mode:
             logger.setLevel(logging.DEBUG)

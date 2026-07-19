@@ -21,7 +21,7 @@ def register():
         return
     print("🚀expertkit-vllm integration activated")
     
-    mode = os.getenv("EXPERTKIT_MODE", "expert_mode")
+    mode = os.getenv("EK_MODE", "expert_mode")
     match mode:
         case "expert_mode":
             expert_mode_register()
