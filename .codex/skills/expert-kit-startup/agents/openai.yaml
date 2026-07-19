@@ -1,0 +1,4 @@
+interface:
+  display_name: "Expert-Kit Startup"
+  short_description: "Start and verify Expert-Kit services"
+  default_prompt: "Use $expert-kit-startup to start Expert-Kit services and verify their readiness."
