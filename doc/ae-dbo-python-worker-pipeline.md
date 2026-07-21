@@ -15,8 +15,9 @@ Worker。
 
 流水启用后，一个 uBatch 等待 Transport Future 时会释放 vLLM 模型执行权，其他
 ready uBatch 可以继续执行 Attention 和 Router。Transport 的私有 asyncio loop
-同时推进各 uBatch 的 staging、Worker RPC 和聚合。当前实现不包含 nsys、阶段绘图
-或性能结论；验收重点是调度、并发上限和数值语义。
+同时推进各 uBatch 的 staging、Worker RPC 和聚合。DeepSeek-V2-Lite 的真实正确性、
+吞吐和 nsys 结果见
+[`benchmarks/deepseek-v2-lite-four-stage.md`](benchmarks/deepseek-v2-lite-four-stage.md)。
 
 ## 2. 四阶段边界
 
@@ -112,17 +113,19 @@ prefill/mixed-batch 调度。
 
 ## 5. 补丁和兼容性
 
-补丁只修改 vLLM 0.25.1 的四个文件：
+补丁修改 vLLM 0.25.1 的五个文件：
 
 | 文件 | 修改 |
 |---|---|
 | `vllm/v1/worker/ubatching.py` | completion-driven ready queue、Future wait、失败广播 |
 | `vllm/v1/worker/gpu_ubatch_wrapper.py` | 子线程异常传播、single-DP metadata |
 | `vllm/v1/worker/gpu_model_runner.py` | single-DP uniform decode 切分 |
+| `vllm/v1/worker/gpu_worker.py` | 按显式 `num_ubatches` 分配 workspace，而非固定 1/2 份 |
 | `vllm/config/vllm.py` | 外部 Expert pipeline 不要求原生 All-to-All backend |
 
-plugin 在 `EK_PIPELINE_ENABLE=1` 时检查安装版本和 `dbo_wait_for_future`。补丁脚本对
-四个文件校验 SHA256；部分 patch 或未知 site-packages 修改会直接失败。恢复原版：
+plugin 在 `EK_PIPELINE_ENABLE=1` 时检查安装版本、patch version 和
+`dbo_wait_for_future`。补丁脚本对五个文件校验 SHA256；部分 patch 或未知
+site-packages 修改会直接失败。恢复原版：
 
 ```bash
 python \
@@ -156,7 +159,7 @@ pytest \
 - blocking API、deadline、cancel 和 close 保持兼容；
 - Worker active slots 为 1/4 时，实际 Backend 并发不超过配置且所有输出逐元素一致。
 
-完整 Qwen 验收需要 Frontend GPU，以及总计约 54 GiB 的 Worker expert 容量。当前
-环境不能访问 NVIDIA driver，因此本分支不声明模型 token 等价或吞吐提升。硬件
-可用时应分别在 `EK_PIPELINE_ENABLE=0/1` 的独立 vLLM 进程中运行同一组四条 prompt，
-保存 token IDs，并要求 pipeline 模式内稳定且与同步参考严格相同。
+本分支已在 RTX 5090 + CPU Worker 上完成 DeepSeek-V2-Lite batch 4–64 验收。服务链
+和冒烟 token 等价通过，但完整 sync 基线自身不是 bitwise deterministic，且 pipeline
+吞吐未提升，因此不能声明严格模型 token 等价或性能收益；详细证据和复现命令见上方
+结果文档。

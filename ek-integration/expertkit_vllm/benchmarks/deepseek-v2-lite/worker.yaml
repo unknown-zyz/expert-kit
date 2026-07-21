@@ -1,0 +1,56 @@
+model:
+  instance_id: 1
+  name: DeepSeek-V2-Lite-Chat
+  weight_version: main
+  num_layers: 27
+  experts_per_layer: 64
+  hidden_dim: 2048
+  expert_intermediate_dim: 1408
+  top_k: 6
+  activation_dtype: bf16
+  weight_dtype: bf16
+
+worker:
+  id: deepseek-cpu-worker-0
+  backend: torch
+  device: cpu
+  max_batch_tokens: 32768
+  max_active_batches_per_device: 4
+  device_memory_limit: 96GiB
+  shutdown_grace_secs: 60
+
+transport:
+  type: grpc
+  max_pending_batches_per_device: 4
+  listen: 127.0.0.1:51051
+  advertise: 127.0.0.1:51051
+
+controller:
+  endpoint: 127.0.0.1:5001
+  heartbeat_interval_secs: 3
+  heartbeat_timeout_secs: 30
+
+weight_manager:
+  max_concurrent_loads: 64
+  dram_cache:
+    max_bytes: 40GiB
+  disk_cache:
+    path: /home/zhangyz/expert-kit/output/deepseek-v2-pipeline-dev-py/worker-cache
+    writeback: false
+  peer:
+    listen: 127.0.0.1:51052
+    advertise: http://127.0.0.1:51052
+  weight_server_endpoint: http://127.0.0.1:6543
+  state_report:
+    max_updates: 64
+    max_delay_ms: 50
+
+logging:
+  level: INFO
+  format: console
+
+observability:
+  prometheus:
+    enabled: false
+  tracing:
+    enabled: false

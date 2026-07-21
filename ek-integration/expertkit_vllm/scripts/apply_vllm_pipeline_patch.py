@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 EXPECTED_VERSION = "0.25.1"
-FILES = {
+CORE_FILES = {
     "vllm/config/vllm.py": (
         "caf6db4dbbafb3e2194022d779e4635e78ea1f51bfc5d299997640cd2806cb05",
         "a100227cbb76a9719cc01e4d4ec10cdab46fc92716734b21e511fab32b754aab",
@@ -28,6 +28,17 @@ FILES = {
         "dbe5972a67424628e9ba24e04c9385928bcfa5fd7247bdd49cf0b449bd0bec44",
     ),
 }
+UPGRADE_FILES = {
+    "vllm/v1/worker/ubatching.py": (
+        "1b21bca3b4723a5dca76317052f564bab0f1b746372b7c98fb7a344c26608666",
+        "50ae00da430202e1588187dc26609bb4a76ded1d44e146e6b310ee29922e7e45",
+    ),
+    "vllm/v1/worker/gpu_worker.py": (
+        "7e00284da7b453154af47300630483ed7ea5a5d79e724c5ee61d4a24edaf930e",
+        "2c35138497a80573bdccaf07f810f386bde785eecc7ba8ffdf8b620989c33995",
+    ),
+}
+ALL_FILES = tuple(dict.fromkeys((*CORE_FILES, *UPGRADE_FILES)))
 
 
 def digest(path: Path) -> str:
@@ -45,36 +56,40 @@ def locate_vllm() -> Path:
 
 
 def state(root: Path) -> str:
-    states = []
-    for relative, (pristine, patched) in FILES.items():
-        actual = digest(root / relative)
-        if actual == pristine:
-            states.append("pristine")
-        elif actual == patched:
-            states.append("patched")
-        else:
-            raise RuntimeError(
-                f"unexpected content hash for {root / relative}: {actual}"
-            )
-    if len(set(states)) != 1:
-        raise RuntimeError(f"partial patch state: {states}")
-    return states[0]
+    hashes = {relative: digest(root / relative) for relative in ALL_FILES}
+    core_pristine = all(
+        hashes[path] == values[0] for path, values in CORE_FILES.items()
+    )
+    legacy = all(hashes[path] == values[1] for path, values in CORE_FILES.items())
+    upgraded = all(
+        hashes[path] == values[1]
+        for path, values in CORE_FILES.items()
+        if path != "vllm/v1/worker/ubatching.py"
+    ) and all(hashes[path] == values[1] for path, values in UPGRADE_FILES.items())
+    gpu_pristine = (
+        hashes["vllm/v1/worker/gpu_worker.py"]
+        == UPGRADE_FILES["vllm/v1/worker/gpu_worker.py"][0]
+    )
+    if core_pristine and gpu_pristine:
+        return "pristine"
+    if legacy and gpu_pristine:
+        return "legacy-patched"
+    if upgraded:
+        return "patched"
+    details = ", ".join(f"{path}={value}" for path, value in hashes.items())
+    raise RuntimeError(f"partial or unknown patch state: {details}")
 
 
 def break_hardlinks(root: Path) -> None:
-    for relative in FILES:
+    for relative in ALL_FILES:
         target = root / relative
         temporary = target.with_suffix(target.suffix + ".expertkit-tmp")
         temporary.write_bytes(target.read_bytes())
         os.replace(temporary, target)
 
 
-def run_patch(root: Path, reverse: bool) -> None:
-    patch_file = (
-        Path(__file__).resolve().parent.parent
-        / "patches"
-        / "vllm-0.25.1-expertkit-pipeline.patch"
-    )
+def run_patch(root: Path, filename: str, reverse: bool) -> None:
+    patch_file = Path(__file__).resolve().parent.parent / "patches" / filename
     command = ["patch", "--batch", "-p1", "-d", str(root)]
     if reverse:
         command.append("--reverse")
@@ -103,7 +118,22 @@ def main() -> int:
         return 0
 
     break_hardlinks(root)
-    run_patch(root, reverse=args.reverse)
+    core_patch = "vllm-0.25.1-expertkit-pipeline.patch"
+    upgrade_patch = "vllm-0.25.1-expertkit-pipeline-v2.patch"
+    if args.apply:
+        if current == "pristine":
+            run_patch(root, core_patch, reverse=False)
+            current = state(root)
+            if current != "legacy-patched":
+                raise RuntimeError(f"expected legacy-patched, found {current}")
+        run_patch(root, upgrade_patch, reverse=False)
+    else:
+        if current == "patched":
+            run_patch(root, upgrade_patch, reverse=True)
+            current = state(root)
+            if current != "legacy-patched":
+                raise RuntimeError(f"expected legacy-patched, found {current}")
+        run_patch(root, core_patch, reverse=True)
     expected = "pristine" if args.reverse else "patched"
     actual = state(root)
     if actual != expected:

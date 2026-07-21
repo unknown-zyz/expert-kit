@@ -10,12 +10,15 @@ import pytest
 import torch
 
 from expertkit_worker.config import WorkerConfig
-from expertkit_worker.factory import build_worker_application
+from expertkit_worker.factory import _linux_available_memory_bytes, build_worker_application
 from expertkit_worker.weights import DirectIOWeightDiskCache
 
 
-def _config(cache_path: Path, *, backend: str = "torch") -> WorkerConfig:
-    worker_device = "cpu" if backend == "ggml" else "cuda:0"
+def _config(
+    cache_path: Path, *, backend: str = "torch", worker_device: str | None = None
+) -> WorkerConfig:
+    if worker_device is None:
+        worker_device = "cpu" if backend == "ggml" else "cuda:0"
     document: dict[str, object] = {
         "model": {
             "instance_id": 7,
@@ -70,6 +73,31 @@ def test_factory_builds_and_closes_ggml_worker(tmp_path: Path) -> None:
         await application.close()
 
     asyncio.run(scenario())
+
+
+def test_factory_builds_and_closes_cpu_torch_worker(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        application = await build_worker_application(_config(tmp_path, worker_device="cpu"))
+        await application.close()
+
+    asyncio.run(scenario())
+
+
+def test_linux_available_memory_uses_reclaimable_memory(tmp_path: Path) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemFree:         1024 kB\nMemAvailable:   16384 kB\nCached:          8192 kB\n",
+        encoding="ascii",
+    )
+
+    assert _linux_available_memory_bytes(meminfo) == 16 * 1024 * 1024
+
+
+def test_linux_available_memory_rejects_malformed_value(tmp_path: Path) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemAvailable: unknown kB\n", encoding="ascii")
+
+    assert _linux_available_memory_bytes(meminfo) is None
 
 
 @pytest.mark.cuda

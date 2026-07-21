@@ -1,0 +1,30 @@
+inference:
+  hidden_dim: 2048
+  intermediate_dim: 1408
+  instance_name: deepseek-v2-lite-pipeline-bench
+  model_name: DeepSeek-V2-Lite-Chat
+
+db:
+  db_dsn: postgres://dev@127.0.0.1:55432/dev
+  max_conn_size: 32
+
+weight:
+  server:
+    addr: http://127.0.0.1:6543
+  cache:
+    Fs:
+      path: /home/zhangyz/expert-kit/output/deepseek-v2-pipeline-dev-py/weight-cache
+
+controller:
+  listen: 127.0.0.1
+  broadcast: 127.0.0.1
+  ports:
+    intra: 5001
+    inter: 5002
+  fault_detection:
+    # The CPU Torch Worker executes one max-shape vLLM profile batch on its
+    # asyncio thread. Cover that bounded startup computation so the Controller
+    # does not evict a healthy Worker before the benchmark begins.
+    heartbeat_timeout_secs: 600
+    node_active_threshold_secs: 120
+    poller_interval_secs: 5

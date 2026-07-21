@@ -5,7 +5,15 @@ import threading
 import time
 
 import pytest
-from vllm.v1.worker.ubatching import UBatchAborted, UBatchCoordinator
+from vllm.v1.worker.ubatching import (
+    EXPERTKIT_PIPELINE_PATCH_VERSION,
+    UBatchAborted,
+    UBatchCoordinator,
+)
+
+
+def test_installed_patch_has_four_ubatch_workspace_fix() -> None:
+    assert EXPERTKIT_PIPELINE_PATCH_VERSION >= 2
 
 
 def test_scheduler_resumes_ubatches_in_future_completion_order() -> None:

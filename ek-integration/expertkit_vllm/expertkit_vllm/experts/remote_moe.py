@@ -140,7 +140,7 @@ def _client_for(
         client = BlockingRoutedMoEClient(
             config.controller_endpoint,
             instance_id=config.instance_id,
-            num_layers=_num_layers(),
+            num_layers=layer.num_layers,
             experts_per_layer=layer.num_experts,
             hidden_dim=layer.hidden_size,
             top_k=layer.top_k,
@@ -169,6 +169,30 @@ def close_clients() -> None:
 atexit.register(close_clients)
 
 
+class _RemoteExpertWeightSink(nn.Module):
+    """Expose vLLM's packed-weight names while discarding remote weights."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        for name in ("w13_weight", "w2_weight"):
+            parameter = nn.Parameter(torch.empty(0), requires_grad=False)
+            parameter.weight_loader = self._discard_weight  # type: ignore[attr-defined]
+            self.register_parameter(name, parameter)
+
+    @staticmethod
+    def _discard_weight(
+        param: nn.Parameter,
+        loaded_weight: torch.Tensor,
+        weight_name: str,
+        *,
+        shard_id: str,
+        expert_id: int,
+        return_success: bool = False,
+    ) -> bool | None:
+        del param, loaded_weight, weight_name, shard_id, expert_id
+        return True if return_success else None
+
+
 class RemoteMoERunner(nn.Module):
     """Preserve vLLM routing and shared experts while offloading routed FFNs."""
 
@@ -189,11 +213,18 @@ class RemoteMoERunner(nn.Module):
         self.num_experts = num_experts
         self.top_k = top_k
         self.hidden_size = hidden_size
+        self.num_layers = _num_layers()
         self.layer_name = prefix
         self.layer_id = _layer_id(prefix)
         self.router = router
         self.gate = gate
         self.shared_experts = shared_experts
+        # DeepSeek-V2's model-level loader maps each checkpoint expert to the
+        # standard FusedMoE packed parameter names before delegating to the
+        # parameter's weight_loader. Keep zero-storage sink parameters at those
+        # names so local routed weights are consumed without allocating them;
+        # Expert Kit has already loaded the same tensors on its Worker.
+        self.routed_experts = _RemoteExpertWeightSink()
         self.apply_routed_scale_to_output = apply_routed_scale_to_output
         self.routed_scaling_factor = routed_scaling_factor
         self.client_config = collect_ek_client_config()

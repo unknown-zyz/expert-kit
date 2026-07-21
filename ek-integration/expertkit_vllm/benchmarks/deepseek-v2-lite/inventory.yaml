@@ -1,0 +1,5 @@
+nodes:
+  - id: deepseek-cpu-worker-0
+    address: http://127.0.0.1:51051
+    channel: grpc
+    device: cpu

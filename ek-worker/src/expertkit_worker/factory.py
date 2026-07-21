@@ -49,6 +49,28 @@ from expertkit_worker.weights.factory import (
 logger = structlog.get_logger(__name__)
 
 
+def _linux_available_memory_bytes(meminfo_path: Path = Path("/proc/meminfo")) -> int | None:
+    """Return Linux's reclaim-aware MemAvailable value when exposed."""
+
+    try:
+        lines = meminfo_path.read_text(encoding="ascii").splitlines()
+    except (OSError, UnicodeError):
+        return None
+    for line in lines:
+        key, separator, value = line.partition(":")
+        if key != "MemAvailable" or not separator:
+            continue
+        fields = value.split()
+        if len(fields) != 2 or fields[1] != "kB":
+            return None
+        try:
+            available_kib = int(fields[0])
+        except ValueError:
+            return None
+        return available_kib * 1024 if available_kib > 0 else None
+    return None
+
+
 def _memory_info(device: torch.device) -> tuple[int, int]:
     if device.type == "cuda":
         available, total = torch.cuda.mem_get_info(device)
@@ -57,13 +79,21 @@ def _memory_info(device: torch.device) -> tuple[int, int]:
         raise ValueError("Worker device must be CPU or CUDA")
     try:
         page_size = os.sysconf("SC_PAGE_SIZE")
-        available_pages = os.sysconf("SC_AVPHYS_PAGES")
         total_pages = os.sysconf("SC_PHYS_PAGES")
     except (OSError, ValueError) as error:
         raise RuntimeError("cannot query available CPU memory") from error
-    if min(page_size, available_pages, total_pages) <= 0:
+    if min(page_size, total_pages) <= 0:
         raise RuntimeError("the operating system returned invalid CPU memory information")
-    return int(available_pages * page_size), int(total_pages * page_size)
+    available_bytes = _linux_available_memory_bytes()
+    if available_bytes is None:
+        try:
+            available_pages = os.sysconf("SC_AVPHYS_PAGES")
+        except (OSError, ValueError) as error:
+            raise RuntimeError("cannot query available CPU memory") from error
+        if available_pages <= 0:
+            raise RuntimeError("the operating system returned invalid CPU memory information")
+        available_bytes = int(available_pages * page_size)
+    return available_bytes, int(total_pages * page_size)
 
 
 async def build_worker_application(config: WorkerConfig) -> WorkerApplication:

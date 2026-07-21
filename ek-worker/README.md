@@ -47,8 +47,9 @@ Important settings:
 - `model.instance_id` is the numeric instance stored by the Controller.
 - `model.name` must match the model name served by the Weight Server.
 - `worker.id` must match the node name assigned by the Controller.
-- `worker.device` is one explicit `cuda:<id>` for Torch. Start another process
-  for another device.
+- `worker.device` is `cpu` or one explicit `cuda:<id>` for Torch. Start another
+  process for another device. CPU Torch is intended for correctness and
+  communication-overlap experiments; its throughput is Host dependent.
 - `worker.device_memory_limit` is the complete device budget for this process.
   Startup rejects a budget larger than the device or current available memory.
 - `worker.max_batch_tokens` defaults to `4096`.

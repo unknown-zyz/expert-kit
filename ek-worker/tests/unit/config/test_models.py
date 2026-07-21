@@ -69,6 +69,27 @@ def test_non_ggml_backend_rejects_ggml_settings(tmp_path: Path) -> None:
         WorkerConfig.model_validate(raw)
 
 
+def test_torch_accepts_cpu_or_indexed_cuda(tmp_path: Path) -> None:
+    assert (
+        WorkerConfig.model_validate(_config(tmp_path, backend="torch", device="cpu")).worker.device
+        == "cpu"
+    )
+    assert (
+        WorkerConfig.model_validate(
+            _config(tmp_path, backend="torch", device="cuda:1")
+        ).worker.device
+        == "cuda:1"
+    )
+
+    with pytest.raises(ValidationError, match="cpu or cuda:<id>"):
+        WorkerConfig.model_validate(_config(tmp_path, backend="torch", device="cuda"))
+
+
+def test_fused_still_requires_indexed_cuda(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="requires worker.device: cuda:<id>"):
+        WorkerConfig.model_validate(_config(tmp_path, backend="fused", device="cpu"))
+
+
 def test_fused_rejects_fp32(tmp_path: Path) -> None:
     raw = _config(tmp_path, backend="fused", device="cuda:1")
     model = raw["model"]

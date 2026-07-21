@@ -24,9 +24,12 @@ def register() -> None:
             )
         from vllm.v1.worker import ubatching
 
-        if not hasattr(ubatching, "dbo_wait_for_future"):
+        if (
+            not hasattr(ubatching, "dbo_wait_for_future")
+            or getattr(ubatching, "EXPERTKIT_PIPELINE_PATCH_VERSION", 0) < 2
+        ):
             raise RuntimeError(
-                "Expert Kit pipeline patch is not applied; run "
+                "Expert Kit pipeline v2 patch is not applied; run "
                 "scripts/apply_vllm_pipeline_patch.py --apply"
             )
 

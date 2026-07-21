@@ -144,10 +144,10 @@ class WorkerProcessConfig(_StrictModel):
         is_cuda = re.fullmatch(r"cuda:\d+", self.device) is not None
         if self.backend is BackendName.GGML and self.device != "cpu":
             raise ValueError("the MVP GGML backend requires worker.device: cpu")
-        if self.backend in {BackendName.TORCH, BackendName.FUSED} and not is_cuda:
-            raise ValueError(
-                f"the MVP {self.backend.value} backend requires worker.device: cuda:<id>"
-            )
+        if self.backend is BackendName.TORCH and self.device != "cpu" and not is_cuda:
+            raise ValueError("the MVP torch backend requires worker.device: cpu or cuda:<id>")
+        if self.backend is BackendName.FUSED and not is_cuda:
+            raise ValueError("the MVP fused backend requires worker.device: cuda:<id>")
         if self.backend is BackendName.GGML and self.ggml is None:
             raise ValueError("worker.ggml configuration is required when worker.backend is ggml")
         if self.backend is not BackendName.GGML and self.ggml is not None:

@@ -6,6 +6,7 @@ import types
 from pathlib import Path
 
 import pytest
+import torch
 
 from expertkit_vllm import plugin
 
@@ -76,6 +77,7 @@ def test_pipeline_registers_when_patch_api_is_present(monkeypatch) -> None:
     modules["vllm.v1.worker.ubatching"].dbo_wait_for_future = (
         lambda future: future.result()
     )
+    modules["vllm.v1.worker.ubatching"].EXPERTKIT_PIPELINE_PATCH_VERSION = 2
 
     plugin.register()
 
@@ -143,3 +145,22 @@ def test_remote_factory_matches_the_vllm_0251_parameter_surface() -> None:
 def test_setup_pins_the_reviewed_vllm_version() -> None:
     setup = (Path(__file__).parents[1] / "setup.py").read_text(encoding="utf-8")
     assert '"vllm==0.25.1"' in setup
+
+
+def test_remote_expert_weight_sink_matches_vllm_loader_contract() -> None:
+    from expertkit_vllm.experts.remote_moe import _RemoteExpertWeightSink
+
+    sink = _RemoteExpertWeightSink()
+    parameters = dict(sink.named_parameters())
+
+    assert set(parameters) == {"w13_weight", "w2_weight"}
+    for parameter in parameters.values():
+        assert parameter.numel() == 0
+        assert parameter.weight_loader(
+            parameter,
+            torch.ones(2, 2),
+            "checkpoint.weight",
+            shard_id="w2",
+            expert_id=3,
+            return_success=True,
+        )
