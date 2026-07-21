@@ -189,6 +189,9 @@ impl ExpertKitService {
 
         Ok(ForwardResp {
             output_tensor: buffer,
+            request_id: request.request_id.clone(),
+            microbatch_id: request.microbatch_id,
+            layer_id: request.layer_id,
         })
     }
 }

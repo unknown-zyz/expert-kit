@@ -47,6 +47,7 @@ tracing-opentelemetry = { workspace = true }
 url = { workspace = true }
 
 [build-dependencies]
+cc = { workspace = true }
 tonic-build = { workspace = true }
 
 [dev-dependencies]

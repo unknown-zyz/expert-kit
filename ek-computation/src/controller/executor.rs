@@ -20,6 +20,7 @@ use crate::{
     controller::registry::{ExpertClient, ExpertId, ExpertIdRef, ShmqWorkerReq, ShmqWorkerResp},
     metrics::METRIC_CONTROLLER_INTRA_REQ,
     proto::ek::worker::v1::{self},
+    worker::profile::{NvtxAsyncRange, NvtxRange},
 };
 
 use super::registry::{GlobalWorkerRegistry, get_registry};
@@ -42,6 +43,9 @@ struct IngressMeta {
     tensor: Tensor,
     sender: mpsc::Sender<Arc<v1::ForwardResp>>,
     result: Vec<Vec<Option<Tensor>>>,
+    request_id: String,
+    microbatch_id: u32,
+    layer_id: u32,
 }
 
 unsafe impl Sync for IngressMeta {}
@@ -100,6 +104,7 @@ pub struct NaiveExecutor {
     seq_gid_cursor: u64,
     req_id_cursor: u64,
     registry: GlobalWorkerRegistry,
+    pipeline_mode: bool,
 }
 
 impl fmt::Debug for NaiveExecutor {
@@ -137,9 +142,17 @@ impl NaiveExecutor {
         );
         let _enter = span.enter();
 
-        let inp_safetensor = SafeTensors::deserialize(&req.tensor)?;
-        let inp_view = inp_safetensor.tensor("data")?;
-        let inp_tensor = TchTensor::from(&inp_view);
+        let inp_tensor = {
+            let _range = NvtxRange::phase(
+                "CONTROLLER_INPUT_ST_LOAD",
+                &req.request_id,
+                req.microbatch_id,
+                req.layer_id,
+            );
+            let inp_safetensor = SafeTensors::deserialize(&req.tensor)?;
+            let inp_view = inp_safetensor.tensor("data")?;
+            TchTensor::from(&inp_view)
+        };
         let mut result = vec![];
 
         for i in &req.sequences {
@@ -154,6 +167,9 @@ impl NaiveExecutor {
             tensor: inp_tensor.inner(),
             sender,
             result,
+            request_id: req.request_id.clone(),
+            microbatch_id: req.microbatch_id,
+            layer_id: req.layer_id,
         };
 
         self.req_id_cursor += 1;
@@ -196,9 +212,13 @@ impl NaiveExecutor {
 
         while let Some((expert_id, egress_meta)) = self.pending_egress.pop_first() {
             let expert_id: ExpertIdRef = expert_id.as_ref();
-            let Ok(client) = self.registry.lock().await.select(expert_id).await else {
-                log::warn!("failed to select client for expert {expert_id}");
-                continue;
+            let client = match self.registry.lock().await.select(expert_id).await {
+                Ok(client) => client,
+                Err(err) if self.pipeline_mode => return Err(err),
+                Err(err) => {
+                    log::warn!("failed to select client for expert {expert_id}: {err}");
+                    continue;
+                }
             };
             chips.push((expert_id.to_owned(), egress_meta.to_owned()));
 
@@ -207,9 +227,33 @@ impl NaiveExecutor {
                 .map(|e| e.seq_gid)
                 .collect::<Vec<GlobalSeqId>>();
 
-            let egress_tensor = self.assemble_seq_tensors(seq_gids)?;
+            let ingress = self
+                .pending_ingress
+                .get(&egress_meta[0].req_id)
+                .ok_or(EKError::NotFound("request metadata not found".into()))?;
+            let request_id = ingress.request_id.clone();
+            let microbatch_id = ingress.microbatch_id;
+            let layer_id = ingress.layer_id;
+
+            let egress_tensor = {
+                let _range = NvtxRange::phase(
+                    "CONTROLLER_ASSEMBLE_EXPERT_INPUT",
+                    &request_id,
+                    microbatch_id,
+                    layer_id,
+                );
+                self.assemble_seq_tensors(seq_gids)?
+            };
             log::debug!("egress tensor shape={:?}", egress_tensor.size());
-            let serialized_tensor = TchTensor::from(egress_tensor).serialize();
+            let serialized_tensor = {
+                let _range = NvtxRange::phase(
+                    "CONTROLLER_WORKER_INPUT_ST_SAVE",
+                    &request_id,
+                    microbatch_id,
+                    layer_id,
+                );
+                TchTensor::from(egress_tensor).serialize()
+            };
             let seqs = egress_meta
                 .iter()
                 .map(|_e| v1::forward_req::SequenceInfo {
@@ -218,6 +262,7 @@ impl NaiveExecutor {
                 .collect::<Vec<_>>();
 
             let pending_resp = self.pending_resp.clone();
+            let pipeline_enabled = self.pipeline_mode;
             let expert_id = expert_id.to_owned();
             match client {
                 ExpertClient::Grpc(grpc_channel) => {
@@ -228,11 +273,21 @@ impl NaiveExecutor {
 
                     let f = tokio::spawn(
                         async move {
+                            let _grpc_range = NvtxAsyncRange::phase(
+                                "CONTROLLER_WORKER_GRPC",
+                                &request_id,
+                                microbatch_id,
+                                layer_id,
+                            );
                             let req = v1::ForwardReq {
                                 // TODO: hardcode instance id.
                                 instance_id: "0".into(),
                                 tensor: serialized_tensor,
                                 sequences: seqs,
+                                request_id,
+                                microbatch_id,
+                                layer_id,
+                                pipeline_enabled,
                             };
 
                             let start = time::Instant::now();
@@ -253,6 +308,12 @@ impl NaiveExecutor {
                     handles.push(f);
                 }
                 ExpertClient::Shm((send_channel, recv_channel)) => {
+                    if self.pipeline_mode {
+                        return Err(EKError::InvalidInput(
+                            "pipelined expert execution currently requires a grpc worker channel"
+                                .into(),
+                        ));
+                    }
                     let fu = async move {
                         let req = ShmqWorkerReq::new(expert_id.as_ref(), &serialized_tensor);
 
@@ -307,6 +368,12 @@ impl NaiveExecutor {
                     handles.push(tokio::spawn(fu));
                 }
                 ExpertClient::Rdma((send_channel, recv_channel)) => {
+                    if self.pipeline_mode {
+                        return Err(EKError::InvalidInput(
+                            "pipelined expert execution currently requires a grpc worker channel"
+                                .into(),
+                        ));
+                    }
                     let fu = async move {
                         let req = ShmqWorkerReq::new(expert_id.as_ref(), &serialized_tensor);
 
@@ -374,10 +441,22 @@ impl NaiveExecutor {
                 log::error!("failed to receive response for expert {}", egress.0);
                 continue;
             };
-            let res_safetensor = SafeTensors::deserialize(res.output_tensor())?;
-            // TODO: hardcode safe tensor name
-            let view = res_safetensor.tensor("data")?;
-            let res_tensor = TchTensor::from(&view).inner();
+            let ingress = self
+                .pending_ingress
+                .get(&egress.1[0].req_id)
+                .ok_or(EKError::NotFound("request metadata not found".into()))?;
+            let res_tensor = {
+                let _range = NvtxRange::phase(
+                    "CONTROLLER_WORKER_OUTPUT_ST_LOAD",
+                    &ingress.request_id,
+                    ingress.microbatch_id,
+                    ingress.layer_id,
+                );
+                let res_safetensor = SafeTensors::deserialize(res.output_tensor())?;
+                // TODO: hardcode safe tensor name
+                let view = res_safetensor.tensor("data")?;
+                TchTensor::from(&view).inner()
+            };
 
             log::debug!("received tensor shape={:?}", res_tensor.size());
             for (seq_idx, egress_meta) in egress.1.iter().enumerate() {
@@ -410,21 +489,39 @@ impl NaiveExecutor {
             if !completed {
                 continue;
             }
-            let res_tensors = meta
-                .result
-                .iter()
-                .map(|x| {
-                    let must_tensor = x.iter().map(|x| x.as_ref().unwrap()).collect::<Vec<_>>();
-                    Tensor::stack(&must_tensor, 0)
-                })
-                .collect::<Vec<_>>();
-
-            let output_tensor = Tensor::stack(&res_tensors, 0);
+            let output_tensor = {
+                let _range = NvtxRange::phase(
+                    "CONTROLLER_AGGREGATE_OUTPUT",
+                    &meta.request_id,
+                    meta.microbatch_id,
+                    meta.layer_id,
+                );
+                let res_tensors = meta
+                    .result
+                    .iter()
+                    .map(|x| {
+                        let must_tensor = x.iter().map(|x| x.as_ref().unwrap()).collect::<Vec<_>>();
+                        Tensor::stack(&must_tensor, 0)
+                    })
+                    .collect::<Vec<_>>();
+                Tensor::stack(&res_tensors, 0)
+            };
             log::debug!("output tensor shape: {:?}", output_tensor.size());
-            let serialized_tensor = TchTensor::from(output_tensor).serialize();
+            let serialized_tensor = {
+                let _range = NvtxRange::phase(
+                    "CONTROLLER_OUTPUT_ST_SAVE",
+                    &meta.request_id,
+                    meta.microbatch_id,
+                    meta.layer_id,
+                );
+                TchTensor::from(output_tensor).serialize()
+            };
 
             let resp = v1::ForwardResp {
                 output_tensor: serialized_tensor,
+                request_id: meta.request_id.clone(),
+                microbatch_id: meta.microbatch_id,
+                layer_id: meta.layer_id,
             };
 
             let send_res = meta
@@ -492,6 +589,14 @@ impl NaiveExecutor {
             req_id_cursor: 0,
             registry: get_registry(),
             pending_resp: Arc::new(Mutex::new(HashMap::new())),
+            pipeline_mode: false,
+        }
+    }
+
+    pub fn new_pipeline() -> Self {
+        Self {
+            pipeline_mode: true,
+            ..Self::new()
         }
     }
 }

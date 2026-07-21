@@ -10,6 +10,7 @@ use crate::{
         metrics::METRIC_CONTROLLER_LAYER,
     },
     proto::ek::worker::v1::{self, computation_service_server::ComputationService},
+    worker::profile::NvtxAsyncRange,
 };
 
 pub struct ComputationProxyServiceImpl {
@@ -42,7 +43,19 @@ impl ComputationProxyServiceImpl {
         request: tonic::Request<v1::ForwardReq>,
     ) -> Result<tonic::Response<v1::ForwardResp>, tonic::Status> {
         let seq_len = request.get_ref().sequences.len();
-        log::info!(seq_len; "forward request in controller start");
+        let _request_range = NvtxAsyncRange::phase(
+            "CONTROLLER_REQUEST",
+            &request.get_ref().request_id,
+            request.get_ref().microbatch_id,
+            request.get_ref().layer_id,
+        );
+        log::info!(
+            seq_len,
+            request_id = request.get_ref().request_id.as_str(),
+            microbatch_id = request.get_ref().microbatch_id,
+            layer_id = request.get_ref().layer_id;
+            "forward request in controller start"
+        );
         let start = std::time::Instant::now();
         let settings = get_ek_settings();
 
@@ -54,6 +67,20 @@ impl ComputationProxyServiceImpl {
                 .with_label_values(&[settings.inference.model_name.as_str()])
                 .observe(elapsed.as_micros() as f64);
         }));
+
+        if request.get_ref().pipeline_enabled {
+            let mut executor = crate::controller::executor::NaiveExecutor::new_pipeline();
+            let mut rx = executor.submit(request.get_ref()).await?;
+            executor.exec().await.map_err(|err| {
+                log::error!("pipeline executor error: {err}");
+                tonic::Status::internal(format!("pipeline executor error: {err}"))
+            })?;
+            return rx
+                .recv()
+                .await
+                .map(|resp| tonic::Response::new(resp.as_ref().clone()))
+                .ok_or_else(|| tonic::Status::internal("pipeline forward error: no data"));
+        }
 
         let mut rx = {
             let mut lg = self.executor.lock().await;

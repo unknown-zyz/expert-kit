@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="630" viewBox="0 0 1320 630">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#1f2937}.title{font-size:21px;font-weight:700}.label{font-size:14px;font-weight:600}.small{font-size:11px}.metric{font-size:12px}</style>
+<text x="34" y="34" class="title">Expert-Kit sync vs pipeline — Nsight Systems critical-path breakdown</text>
+<text x="34" y="58" class="small">mean per client Expert request; bars use cross-process request IDs and global nsys timestamps</text>
+<line x1="245.00" y1="82" x2="245.00" y2="416" stroke="#e5e7eb"/>
+<text x="245.00" y="76" text-anchor="middle" class="small">0.00 ms</text>
+<line x1="448.00" y1="82" x2="448.00" y2="416" stroke="#e5e7eb"/>
+<text x="448.00" y="76" text-anchor="middle" class="small">2.77 ms</text>
+<line x1="651.00" y1="82" x2="651.00" y2="416" stroke="#e5e7eb"/>
+<text x="651.00" y="76" text-anchor="middle" class="small">5.55 ms</text>
+<line x1="854.00" y1="82" x2="854.00" y2="416" stroke="#e5e7eb"/>
+<text x="854.00" y="76" text-anchor="middle" class="small">8.32 ms</text>
+<line x1="1057.00" y1="82" x2="1057.00" y2="416" stroke="#e5e7eb"/>
+<text x="1057.00" y="76" text-anchor="middle" class="small">11.10 ms</text>
+<line x1="1260.00" y1="82" x2="1260.00" y2="416" stroke="#e5e7eb"/>
+<text x="1260.00" y="76" text-anchor="middle" class="small">13.87 ms</text>
+<text x="34" y="138" class="label">sync / Worker×1</text>
+<rect x="245.00" y="116" width="12.51" height="32" fill="#4C78A8" stroke="#172033" stroke-width="0.8"><title>Client→Controller: 0.171 ms</title></rect>
+<rect x="257.51" y="116" width="11.21" height="32" fill="#F2CF5B" stroke="#172033" stroke-width="0.8"><title>Controller prepare: 0.153 ms</title></rect>
+<rect x="268.72" y="116" width="962.34" height="32" fill="#54A24B" stroke="#172033" stroke-width="0.8"><title>Worker RPC span: 13.155 ms</title></rect>
+<text x="749.89" y="136" text-anchor="middle" class="small" style="fill:#fff">13.15 ms</text>
+<rect x="1231.06" y="116" width="8.76" height="32" fill="#B279A2" stroke="#172033" stroke-width="0.8"><title>Controller aggregate: 0.120 ms</title></rect>
+<rect x="1239.82" y="116" width="20.18" height="32" fill="#E45756" stroke="#172033" stroke-width="0.8"><title>Controller→Client: 0.276 ms</title></rect>
+<text x="245" y="169" class="metric">total 13.874 ms · Worker RPC/client 28.83 · Expert concurrency 1 · queue/RPC 6.223 ms</text>
+<text x="245" y="187" class="metric">E active/request 12.354 ms · GPU D2H/H2D n/a/n/a ms · throughput 5.405 tok/s (+0.00%)</text>
+<text x="34" y="246" class="label">pipeline / Worker×1</text>
+<rect x="245.00" y="224" width="14.34" height="32" fill="#4C78A8" stroke="#172033" stroke-width="0.8"><title>Client→Controller: 0.196 ms</title></rect>
+<rect x="259.34" y="224" width="7.20" height="32" fill="#F2CF5B" stroke="#172033" stroke-width="0.8"><title>Controller prepare: 0.098 ms</title></rect>
+<rect x="266.53" y="224" width="894.88" height="32" fill="#54A24B" stroke="#172033" stroke-width="0.8"><title>Worker RPC span: 12.232 ms</title></rect>
+<text x="713.97" y="244" text-anchor="middle" class="small" style="fill:#fff">12.23 ms</text>
+<rect x="1161.41" y="224" width="6.08" height="32" fill="#B279A2" stroke="#172033" stroke-width="0.8"><title>Controller aggregate: 0.083 ms</title></rect>
+<rect x="1167.49" y="224" width="15.57" height="32" fill="#E45756" stroke="#172033" stroke-width="0.8"><title>Controller→Client: 0.213 ms</title></rect>
+<text x="245" y="277" class="metric">total 12.823 ms · Worker RPC/client 10.83 · Expert concurrency 1 · queue/RPC 9.074 ms</text>
+<text x="245" y="295" class="metric">E active/request 4.972 ms · GPU D2H/H2D 0.0005/0.0028 ms · throughput 5.089 tok/s (-5.85%)</text>
+<text x="34" y="354" class="label">pipeline / Worker×4</text>
+<rect x="245.00" y="332" width="17.81" height="32" fill="#4C78A8" stroke="#172033" stroke-width="0.8"><title>Client→Controller: 0.244 ms</title></rect>
+<rect x="262.81" y="332" width="63.48" height="32" fill="#F2CF5B" stroke="#172033" stroke-width="0.8"><title>Controller prepare: 0.868 ms</title></rect>
+<rect x="326.30" y="332" width="531.86" height="32" fill="#54A24B" stroke="#172033" stroke-width="0.8"><title>Worker RPC span: 7.270 ms</title></rect>
+<text x="592.23" y="352" text-anchor="middle" class="small" style="fill:#fff">7.27 ms</text>
+<rect x="858.15" y="332" width="6.93" height="32" fill="#B279A2" stroke="#172033" stroke-width="0.8"><title>Controller aggregate: 0.095 ms</title></rect>
+<rect x="865.09" y="332" width="32.51" height="32" fill="#E45756" stroke="#172033" stroke-width="0.8"><title>Controller→Client: 0.444 ms</title></rect>
+<text x="245" y="385" class="metric">total 8.921 ms · Worker RPC/client 10.79 · Expert concurrency 4 · queue/RPC 2.009 ms</text>
+<text x="245" y="403" class="metric">E active/request 4.567 ms · GPU D2H/H2D 0.0005/0.0042 ms · throughput 6.470 tok/s (+19.70%)</text>
+<rect x="110" y="448" width="16" height="16" fill="#4C78A8"/>
+<text x="133" y="461" class="small">Client→Controller</text>
+<rect x="315" y="448" width="16" height="16" fill="#F2CF5B"/>
+<text x="338" y="461" class="small">Controller prepare</text>
+<rect x="520" y="448" width="16" height="16" fill="#54A24B"/>
+<text x="543" y="461" class="small">Worker RPC span</text>
+<rect x="725" y="448" width="16" height="16" fill="#B279A2"/>
+<text x="748" y="461" class="small">Controller aggregate</text>
+<rect x="930" y="448" width="16" height="16" fill="#E45756"/>
+<text x="953" y="461" class="small">Controller→Client</text>
+<text x="34" y="502" class="small">Worker RPC span contains Controller→Worker gRPC, Worker queue, Expert compute, serialization and responses; nested phase tables in the JSON provide the detailed split.</text>
+</svg>

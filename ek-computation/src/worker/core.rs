@@ -6,6 +6,8 @@ use std::sync::{Arc, OnceLock};
 use tokio;
 use tracing::instrument;
 
+use super::profile::NvtxRange;
+
 /// Async version of EKInstanceGate for non-compute operations
 pub struct EKInstanceGateAsync {
     experts: Arc<tokio::sync::RwLock<dyn ExpertDB + Send + Sync>>,
@@ -85,6 +87,9 @@ impl EKInstanceGateSync {
         );
         let start = std::time::Instant::now();
 
+        let request_id = req.request_id.clone();
+        let microbatch_id = req.microbatch_id;
+        let layer_id = req.layer_id;
         let input_tensor = req.tensor;
 
         // Validate request structure
@@ -93,14 +98,24 @@ impl EKInstanceGateSync {
         let exp_id = &req.sequences[0].experts[0];
 
         // Load expert synchronously from shared database
-        let exp = self.experts.load(exp_id)?;
+        let exp = {
+            let _range =
+                NvtxRange::phase("WORKER_EXPERT_LOOKUP", &request_id, microbatch_id, layer_id);
+            self.experts.load(exp_id)?
+        };
 
         let now = std::time::Instant::now();
         tracing::debug!("[L3 {:?}] exp_backend.forward_sync() started", exp_id,);
 
         // Perform synchronous computation
-        let st = safetensors::SafeTensors::deserialize(&input_tensor).unwrap();
+        let st = {
+            let _range =
+                NvtxRange::phase("WORKER_INPUT_ST_LOAD", &request_id, microbatch_id, layer_id);
+            safetensors::SafeTensors::deserialize(&input_tensor).unwrap()
+        };
         let tv = st.tensor("data")?;
+        let _profile_range =
+            NvtxRange::expert(&request_id, microbatch_id, layer_id, exp_id.as_ref());
         let res = exp.forward(&tv)?;
 
         tracing::debug!(
@@ -115,6 +130,9 @@ impl EKInstanceGateSync {
 
         let resp = ek::worker::v1::ForwardResp {
             output_tensor: output_bytes,
+            request_id,
+            microbatch_id,
+            layer_id,
         };
 
         tracing::debug!(

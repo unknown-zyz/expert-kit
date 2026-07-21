@@ -8,6 +8,7 @@ use tracing::instrument;
 use crate::{
     backend::{EkTensor, ggml::GgmlTensor, torch::TchTensor},
     ffn::expert_ggml::GgmlFFN,
+    worker::profile::NvtxRange,
     x::{self},
 };
 
@@ -49,22 +50,41 @@ impl ExpertBackend {
     pub fn forward(&self, view: &TensorView) -> EKResult<Vec<u8>> {
         match self {
             ExpertBackend::Torch(exp) => {
-                let inp = TchTensor::from_tensor_view(view);
+                let inp = {
+                    let _range = NvtxRange::new("EKR:WORKER_INPUT_TENSOR");
+                    TchTensor::from_tensor_view(view)
+                };
                 let shape = inp.inner().size();
-                let inp = inp.to_device(exp.device());
+                let inp = {
+                    let _range = NvtxRange::new("EKR:WORKER_INPUT_DEVICE");
+                    inp.to_device(exp.device())
+                };
                 log::debug!("input shape {shape:?}");
                 assert!(shape.len() == 2);
-                Ok(exp.forward(&inp).serialize())
+                let output = {
+                    let _range = NvtxRange::new("EKR:WORKER_EXPERT_MATH");
+                    exp.forward(&inp)
+                };
+                let _range = NvtxRange::new("EKR:WORKER_OUTPUT_ST_SAVE");
+                Ok(output.serialize())
             }
             ExpertBackend::OnnxF32(_exp) => {
                 todo!()
             }
             ExpertBackend::Ggml(exp) => {
-                let inp = GgmlTensor::from_tensor_view(view);
+                let inp = {
+                    let _range = NvtxRange::new("EKR:WORKER_INPUT_TENSOR");
+                    GgmlTensor::from_tensor_view(view)
+                };
                 let shape = inp.shape();
                 log::debug!("input shape {shape:?}");
                 assert!(shape.len() == 2);
-                Ok(exp.forward(&inp).serialize())
+                let output = {
+                    let _range = NvtxRange::new("EKR:WORKER_EXPERT_MATH");
+                    exp.forward(&inp)
+                };
+                let _range = NvtxRange::new("EKR:WORKER_OUTPUT_ST_SAVE");
+                Ok(output.serialize())
             }
         }
     }

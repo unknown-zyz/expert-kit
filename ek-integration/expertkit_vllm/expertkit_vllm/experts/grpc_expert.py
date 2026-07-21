@@ -5,15 +5,32 @@ from torch.nn import Parameter
 from typing import Optional, Callable
 from vllm.model_executor.layers.quantization import QuantizationConfig
 from expertkit_vllm.grpc_client import ExpertKitClient
+from expertkit_vllm.pipeline_trace import pipeline_tracer
+from expertkit_vllm import profile
 from expertkit_vllm.utils.config import collect_ek_client_cfg
 from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.models.utils import PPMissingLayer
+from vllm.v1.worker.ubatching import (
+    dbo_current_ubatch_id,
+    dbo_enabled,
+    dbo_yield_and_switch_from_comm_to_compute,
+    dbo_yield_and_switch_from_compute_to_comm,
+)
+
+try:
+    from vllm.v1.worker.ubatching import dbo_wait_for_future
+except ImportError:
+    # Preserve the original synchronous integration when the optional
+    # Expert-Kit vLLM patch has not been applied. register() rejects pipeline
+    # mode before model construction in that case.
+    def dbo_wait_for_future(future):
+        return future.result()
 
 logger = logging.getLogger(__name__)
 
 class GrpcExpert(PPMissingLayer):
     """GrpcExpert Expert layer that handles remote expert computation.
-    
+
     This layer handles the remote expert computation via gRPC and is designed
     to be used independently or within the MoE architecture.
     """
@@ -84,6 +101,7 @@ class GrpcExpert(PPMissingLayer):
         self.prefix = prefix
         self.ek_model_name = ek_cfg.ek_model_name
         self.debug_mode = ek_cfg.ek_debug_mode
+        self.pipeline_enabled = ek_cfg.ek_pipeline_enabled
 
         # essential params for expert_select
         self.renormalize=renormalize
@@ -148,13 +166,20 @@ class GrpcExpert(PPMissingLayer):
             RuntimeError: On any remote computation failure
         """
         batch_size, hidden_dim = hidden_states.shape
+        microbatch_id = dbo_current_ubatch_id()
+        request_id = self.client.next_request_id()
         if self.debug_mode:
             logger.debug(f"🚀 Hidden states shape: {hidden_states.shape}, batch_size: {batch_size}, hidden_dim: {hidden_dim}")
             logger.debug(f"🚀 Router logits shape: {router_logits.shape}")
             
-        # Apply softmax first, then take topk
-        router_probs = F.softmax(router_logits, dim=-1)
-        routing_weights, routing_indices = torch.topk(router_probs, self.top_k, dim=-1)
+        # Apply softmax first, then take topk.
+        with profile.range(
+            "ROUTER_TOPK", request_id, microbatch_id, self.layer_idx
+        ):
+            router_probs = F.softmax(router_logits, dim=-1)
+            routing_weights, routing_indices = torch.topk(
+                router_probs, self.top_k, dim=-1
+            )
 
         # TODO: use vllm original select_experts
         # routing_weights, routing_indices = self.select_experts(
@@ -171,89 +196,105 @@ class GrpcExpert(PPMissingLayer):
         # )
         
         # Renormalize topk weights to ensure they sum to 1
-        if self.renormalize:
-            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-8)
-        
-        # Use reasonable threshold for similarity detection
-        should_optimize = False
-        unique_batch_size = batch_size
-        inverse_indices = None
-        
-        if batch_size > 32:  # Only consider optimization for larger batches
-            # Use hash or reduced precision to detect duplicates
-            hidden_hash = torch.round(hidden_states * 1000).int()  # Reduce precision
-            unique_hash, inverse_indices = torch.unique(
-                hidden_hash, dim=0, return_inverse=True
-            )
-            unique_batch_size = unique_hash.shape[0]
-            should_optimize = unique_batch_size < 0.7 * batch_size  # Adjust threshold
-            
-            if self.debug_mode:
-                logger.debug(f"🚀 unique_batch_size: {unique_batch_size}, batch_size: {batch_size}, should_optimize: {should_optimize}")
-        
-        if not should_optimize:
-            # Standard path: process all tokens directly
-            expert_ids = []
-            for seq_idx in range(batch_size):
-                token_expert_indices = routing_indices[seq_idx].tolist()
-                token_expert_ids = [
-                    f"{self.ek_model_name}/l{self.layer_idx}-e{expert_idx}" 
-                    for expert_idx in token_expert_indices
+        with profile.range(
+            "ROUTE_PREPARE", request_id, microbatch_id, self.layer_idx
+        ):
+            if self.renormalize:
+                routing_weights = routing_weights / (
+                    routing_weights.sum(dim=-1, keepdim=True) + 1e-8
+                )
+
+            expert_ids = [
+                [
+                    f"{self.ek_model_name}/l{self.layer_idx}-e{expert_idx}"
+                    for expert_idx in routing_indices[seq_idx].tolist()
                 ]
-                expert_ids.append(token_expert_ids)
-            
-            # Call remote expert service
+                for seq_idx in range(batch_size)
+            ]
+
+        if not self.pipeline_enabled:
             expert_outputs = self.client.forward_expert(
                 expert_ids=expert_ids,
-                hidden_state=hidden_states
+                hidden_state=hidden_states,
+                request_id=request_id,
+                microbatch_id=microbatch_id,
+                layer_id=self.layer_idx,
             )
-            
         else:
-            unique_hidden = hidden_states[torch.unique(inverse_indices)]
-            
-            # Build expert IDs for unique tokens
-            unique_expert_ids = []
-            unique_routing_weights = []
-            unique_routing_indices = []
-            
-            processed_unique = set()
-            for i in range(batch_size):
-                unique_idx = inverse_indices[i].item()
-                if unique_idx not in processed_unique:
-                    processed_unique.add(unique_idx)
-                    
-                    token_expert_indices = routing_indices[i].tolist()
-                    token_expert_ids = [
-                        f"{self.ek_model_name}/l{self.layer_idx}-e{expert_idx}" 
-                        for expert_idx in token_expert_indices
-                    ]
-                    unique_expert_ids.append(token_expert_ids)
-                    unique_routing_weights.append(routing_weights[i])
-                    unique_routing_indices.append(routing_indices[i])
-            
-            # Call remote expert service
-            unique_expert_outputs = self.client.forward_expert(
-                expert_ids=unique_expert_ids,
-                hidden_state=unique_hidden
+            a2e_start = pipeline_tracer.now_ns()
+            a_start = pipeline_tracer.last_stage_end(microbatch_id, a2e_start)
+            pipeline_tracer.record(
+                "A",
+                a_start,
+                a2e_start,
+                request_id,
+                microbatch_id,
+                self.layer_idx,
             )
-            
-            # Map back to original batch
-            expert_outputs = torch.zeros(
-                (batch_size, self.top_k, hidden_dim), 
-                device=hidden_states.device, 
-                dtype=hidden_states.dtype
+
+            with pipeline_tracer.nvtx(
+                "A2E", microbatch_id, self.layer_idx, request_id
+            ):
+                if dbo_enabled():
+                    dbo_yield_and_switch_from_compute_to_comm()
+                call = self.client.submit_forward_expert(
+                    expert_ids=expert_ids,
+                    hidden_state=hidden_states,
+                    request_id=request_id,
+                    microbatch_id=microbatch_id,
+                    layer_id=self.layer_idx,
+                    pipeline_enabled=True,
+                )
+                if dbo_enabled():
+                    dbo_yield_and_switch_from_comm_to_compute()
+                a2e_end = dbo_wait_for_future(call.a2e_future)
+            pipeline_tracer.record(
+                "A2E",
+                a2e_start,
+                a2e_end,
+                request_id,
+                microbatch_id,
+                self.layer_idx,
             )
-            
-            unique_idx_map = {}
-            unique_counter = 0
-            for i in range(batch_size):
-                orig_unique_idx = inverse_indices[i].item()
-                if orig_unique_idx not in unique_idx_map:
-                    unique_idx_map[orig_unique_idx] = unique_counter
-                    unique_counter += 1
-                
-                mapped_idx = unique_idx_map[orig_unique_idx]
-                expert_outputs[i] = unique_expert_outputs[mapped_idx]
+
+            e_start = a2e_end
+            expert_outputs = dbo_wait_for_future(call.future)
+            e_end = pipeline_tracer.now_ns()
+            pipeline_tracer.record(
+                "E",
+                e_start,
+                e_end,
+                request_id,
+                microbatch_id,
+                self.layer_idx,
+            )
+
+            e2a_start = e_end
+            with pipeline_tracer.nvtx(
+                "E2A", microbatch_id, self.layer_idx, request_id
+            ):
+                if dbo_enabled():
+                    dbo_yield_and_switch_from_compute_to_comm()
+                with profile.range(
+                    "H2D_ENQUEUE", request_id, microbatch_id, self.layer_idx
+                ):
+                    expert_outputs = expert_outputs.to(
+                        device=hidden_states.device,
+                        dtype=hidden_states.dtype,
+                        non_blocking=True,
+                    )
+                if dbo_enabled():
+                    dbo_yield_and_switch_from_comm_to_compute()
+            e2a_end = pipeline_tracer.now_ns()
+            pipeline_tracer.record(
+                "E2A",
+                e2a_start,
+                e2a_end,
+                request_id,
+                microbatch_id,
+                self.layer_idx,
+            )
+            pipeline_tracer.mark_stage_end(microbatch_id, e2a_end)
         
         expert_outputs = expert_outputs.to(
             device=hidden_states.device, 
@@ -276,7 +317,13 @@ class GrpcExpert(PPMissingLayer):
             logger.debug(f"🚀 Weights shape: {expanded_weights.shape}, Expert outputs shape: {expert_outputs.shape}")
         
         # Compute weighted sum: [batch_size, hidden_dim]
-        output = torch.sum(expanded_weights * expert_outputs, dim=1)
+        with profile.range(
+            "WEIGHTED_COMBINE",
+            request_id,
+            microbatch_id,
+            self.layer_idx,
+        ):
+            output = torch.sum(expanded_weights * expert_outputs, dim=1)
         
         return output
 
@@ -290,7 +337,7 @@ class GrpcExpert(PPMissingLayer):
             *args,
             **kwargs
         )
-    
+
     @classmethod
     def make_expert_params_mapping(
         cls,
@@ -298,4 +345,3 @@ class GrpcExpert(PPMissingLayer):
         **kwargs
     ):
         return []
-    

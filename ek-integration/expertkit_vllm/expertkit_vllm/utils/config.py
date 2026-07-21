@@ -10,6 +10,8 @@ class EkClientConfig:
     ek_debug_mode: bool = False
     ek_client_timeout: int = 2  # seconds
     ek_model_name: str = ""
+    ek_pipeline_enabled: bool = False
+    ek_pipeline_trace: str = ""
 
 def collect_ek_client_cfg(cfg: Optional[PretrainedConfig]=None) -> EkClientConfig:
     # init cfg from file and env variables
@@ -29,6 +31,8 @@ def collect_ek_client_cfg(cfg: Optional[PretrainedConfig]=None) -> EkClientConfi
     ek_cfg.ek_debug_mode = os.getenv("EK_DEBUG_MODE", str(ek_cfg.ek_debug_mode)) == "1"
     ek_cfg.ek_client_timeout = os.getenv("EK_CLIENT_TIMEOUT", int(ek_cfg.ek_client_timeout))
     ek_cfg.ek_model_name = os.getenv("EK_MODEL_NAME", ek_cfg.ek_model_name)
+    ek_cfg.ek_pipeline_enabled = os.getenv("EK_PIPELINE_ENABLE", "0") == "1"
+    ek_cfg.ek_pipeline_trace = os.getenv("EK_PIPELINE_TRACE", "")
 
     if not ek_cfg.ek_model_name:
         raise ValueError("EK_MODEL_NAME must be set in config or environment variables")
@@ -38,5 +42,7 @@ def collect_ek_client_cfg(cfg: Optional[PretrainedConfig]=None) -> EkClientConfi
     ek_cfg.ek_debug_mode = bool(ek_cfg.ek_debug_mode)
     ek_cfg.ek_mode = str(ek_cfg.ek_mode)
     ek_cfg.ek_addr = str(ek_cfg.ek_addr)
+    ek_cfg.ek_pipeline_enabled = bool(ek_cfg.ek_pipeline_enabled)
+    ek_cfg.ek_pipeline_trace = str(ek_cfg.ek_pipeline_trace)
 
     return ek_cfg

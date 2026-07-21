@@ -40,6 +40,8 @@ static WORKER_PARALLEL: LazyLock<usize> = LazyLock::new(|| {
         .unwrap_or(1)
 });
 
+pub(crate) mod profile;
+
 /// Get the global RDMA request queue
 pub fn get_rdma_req_queue() -> Option<&'static Arc<Mutex<RdmaQueue<ShmqWorkerReq>>>> {
     RDMA_REQ_QUEUE.get()

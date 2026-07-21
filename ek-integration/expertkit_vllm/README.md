@@ -173,3 +173,112 @@ outputs = llm.generate(prompts)
 2. **Connection timeout**: Increase `ek_client_timeout` value if your Expert-Kit service is slow to respond.
 
 3. **Debug mode**: Set `ek_debug_mode=True` or `EK_DEBUG_MODE=1` to enable detailed logging.
+
+## Four-stage Expert Pipeline
+
+The Expert-Kit pipeline targets vLLM 0.25.1 and keeps four microbatches in
+flight across Attention (`A`), dispatch (`A2E`), remote expert execution (`E`),
+and combine (`E2A`). Apply the tracked vLLM patch after installing the editable
+plugin:
+
+```bash
+uv pip install vllm==0.25.1
+uv pip install --no-deps -e ek-integration/expertkit_vllm
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/apply_vllm_pipeline_patch.py --apply
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/apply_vllm_pipeline_patch.py --check
+```
+
+Enable the pipeline and use eager execution with four uBatches. Do not combine
+`ubatch_size=4` with `enable_dbo=True`, because vLLM gives the latter a fixed
+two-uBatch interpretation.
+
+```python
+os.environ["EK_PIPELINE_ENABLE"] = "1"
+os.environ["EK_PIPELINE_TRACE"] = "/tmp/expertkit-pipeline-trace.json"
+
+llm = LLM(
+    model=os.environ["QWEN3_30B_A3B_ROOT"],
+    enforce_eager=True,
+    ubatch_size=4,
+    dbo_decode_token_threshold=0,
+    dbo_prefill_token_threshold=0,
+)
+```
+
+The batch must be a uniform decode batch containing at least four requests.
+Prefill, mixed prefill/decode, and smaller decode batches use the compatible
+non-uBatch execution path. The first pipeline version requires a
+Controller-to-Worker `grpc` inventory; SHM and RDMA continue to use the legacy
+synchronous path.
+
+Validate the generated Chrome trace with:
+
+```bash
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/validate_pipeline_trace.py \
+  /tmp/expertkit-pipeline-trace.json
+```
+
+The validator requires all four stages for complete remote calls, four observed
+uBatch IDs, overlapping `E(uBatch i)` and `A(uBatch j)` intervals, and multiple
+concurrently in-flight expert calls. A periodic snapshot may contain a small
+number of still-running calls at its tail; incomplete calls elsewhere fail
+validation. Render a time-scaled SVG from a real trace with:
+
+```bash
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/render_pipeline_trace.py \
+  /tmp/expertkit-pipeline-trace.json \
+  doc/assets/ae-dbo-four-stage-overlap.svg
+```
+
+For hardware timing, build the release Worker and profile the complete service
+process tree. `--trace-fork-before-exec=true` is required for NVTX ranges in
+vLLM's forkserver-created EngineCore:
+
+```bash
+cargo build --release --bin ek-cli
+nsys profile \
+  --trace=cuda,nvtx,osrt \
+  --trace-fork-before-exec=true \
+  --sample=none --cpuctxsw=process-tree \
+  --cuda-event-trace=true --resolve-symbols=false \
+  --wait=primary --force-overwrite=true \
+  --output=/tmp/expertkit-four-stage \
+  .venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/run_nsys_pipeline_profile.py \
+  --config dev/hello-world.config.yaml \
+  --model qwen3-30b-a3b
+
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/analyze_nsys_pipeline.py \
+  /tmp/expertkit-four-stage.nsys-rep \
+  /tmp/expertkit-four-stage-analysis.json
+.venv/bin/python \
+  ek-integration/expertkit_vllm/scripts/render_nsys_pipeline.py \
+  /tmp/expertkit-four-stage-analysis.json \
+  doc/assets/ae-dbo-nsys-four-stage-overlap.svg
+```
+
+The analyzer counts actual CUDA kernels as `A`, Worker `exp.forward()` on-CPU
+intervals as `E`, and the non-compute intervals between them as `A2E`/`E2A`.
+It reports how much communication overlaps another uBatch's hardware compute.
+See `doc/ae-dbo-pipeline-design.md` for the exact definitions and current
+measured result.
+
+Do not enable `EK_PIPELINE_TRACE` during performance benchmarks because trace
+serialization and file I/O materially affect throughput. Run the matched
+sync/pipeline benchmark with:
+
+```bash
+timeout 1800s .venv/bin/python \
+  ek-integration/expertkit_vllm/benchmark/pipeline_benchmark.py \
+  --warmup 1 --repetitions 5 --max-tokens 32 \
+  --output /tmp/expertkit-pipeline-benchmark.json
+```
+
+See `doc/ae-dbo-pipeline-design.md` for source-level changes, correctness
+levels, the real overlap diagram, and current performance results. To restore
+pristine vLLM source files, run the patch script with `--reverse`.

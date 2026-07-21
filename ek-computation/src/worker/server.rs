@@ -11,6 +11,7 @@ use tonic::{Request, Response, Status};
 use tracing::instrument;
 
 use super::core::{EKInstanceGateSync, get_instance_gate_sync};
+use super::profile::NvtxAsyncRange;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 #[derive(Debug)]
@@ -38,6 +39,12 @@ impl ComputationService for BasicExpertImpl {
     async fn forward(&self, request: Request<ForwardReq>) -> Result<Response<ForwardResp>, Status> {
         let now = Instant::now();
         let exp_id = request.get_ref().sequences[0].experts[0].clone();
+        log::debug!(
+            request_id = request.get_ref().request_id.as_str(),
+            microbatch_id = request.get_ref().microbatch_id,
+            layer_id = request.get_ref().layer_id;
+            "pipelined expert request received"
+        );
         tracing::debug!("[L1 {:?}] exp received!", &exp_id);
         let res = self.inner_forward(request).await;
         tracing::debug!("[L1 {:?}] completed in {:?}", &exp_id, now.elapsed());
@@ -100,6 +107,9 @@ impl BasicExpertImpl {
 
         let forward_now = Instant::now();
         let req_inner = request.into_inner();
+        let request_id = req_inner.request_id.clone();
+        let microbatch_id = req_inner.microbatch_id;
+        let layer_id = req_inner.layer_id;
 
         // Use sync gate for compute-intensive operations
         let gate_sync = self.gate_sync;
@@ -110,7 +120,10 @@ impl BasicExpertImpl {
         let cx_clone = cx.clone();
 
         // Run synchronous computation in blocking task
+        let queue_range =
+            NvtxAsyncRange::phase("WORKER_QUEUE", &request_id, microbatch_id, layer_id);
         let res = tokio::task::spawn_blocking(move || {
+            drop(queue_range);
             let _guard = cx_clone.attach();
 
             // Perform synchronous forward computation
