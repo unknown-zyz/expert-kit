@@ -176,6 +176,9 @@ outputs = llm.generate(prompts)
 
 ## Four-stage Expert Pipeline
 
+For a file-by-file review guide and end-to-end experiment reproduction steps,
+see [`doc/ae-dbo-code-review-and-reproduction.md`](../../doc/ae-dbo-code-review-and-reproduction.md).
+
 The Expert-Kit pipeline targets vLLM 0.25.1 and keeps four microbatches in
 flight across Attention (`A`), dispatch (`A2E`), remote expert execution (`E`),
 and combine (`E2A`). Apply the tracked vLLM patch after installing the editable

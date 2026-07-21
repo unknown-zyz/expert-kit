@@ -1,5 +1,8 @@
 # Expert-Kit / vLLM 四阶段流水设计与验证
 
+> 逐文件代码 Review 导航、脚本参数和从零复现实验命令见
+> [`ae-dbo-code-review-and-reproduction.md`](ae-dbo-code-review-and-reproduction.md)。
+
 ## 1. 总结
 
 本实现把 vLLM 的一个 uniform-decode batch 拆成四个 micro-batch，并将每个 MoE 层划分为四个可观测阶段：
@@ -22,6 +25,12 @@ uBatch 等待远程 Expert Future 时，会释放 Python 模型执行权；其�
 | 当前环境性能提升 | **CONDITIONAL PASS** | Worker×1 吞吐 -5.85%；Worker×4 吞吐 **+19.70%**、延迟 -16.46% |
 
 因此，当前代码证明了流水机制确实工作，并在 CPU Worker 有四个执行槽时取得可重复吞吐收益；但模型级严格 token 等价仍未通过，不能把性能 PASS 当作完整正确性 PASS。单线程 Worker 无法消费流水并发，拆 micro-batch 后的 RPC 和排队开销仍会导致负收益。完整同步/流水 profile、通信拆分和瓶颈分析见 [`ae-dbo-profile-comparison.md`](ae-dbo-profile-comparison.md)。
+
+> 并发控制勘误：历史报告沿用 `Worker×1/Worker×4` 标签，但当前 gRPC
+> Worker 不读取 `EK_WORKER_THREADS`；数字 1/4 是对应报告中实际观测到的最大
+> Expert 并发，并非该参数锁定的实验变量。因此 `+19.70%` 是有效的历史观测，
+> 但不能仅归因于 `--worker-threads 4`。严格复现边界见
+> [`ae-dbo-code-review-and-reproduction.md`](ae-dbo-code-review-and-reproduction.md)。
 
 ## 2. 架构与数据流
 

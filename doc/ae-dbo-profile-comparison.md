@@ -1,5 +1,12 @@
 # AE-DBO 同步/四阶段流水 Profile 对比
 
+> **并发控制勘误：**下文保留采集时使用的 `Worker×1/Worker×4` 报告标签，
+> 但 gRPC Worker 路径实际不读取 `EK_WORKER_THREADS`。表中的 1/4 是 nsys
+> 在两份报告中观测到的最大 Expert 并发，不是 `--worker-threads` 锁定的上限。
+> 因此这些数据可以说明“观测到四路 Expert 并发的运行吞吐更高”，不能单独证明
+> CLI 参数导致提升。当前脚本边界和严格复现要求见
+> [`ae-dbo-code-review-and-reproduction.md`](ae-dbo-code-review-and-reproduction.md)。
+
 ## 1. 结论
 
 本轮在同一台 RTX 5090、同一模型和同一 Expert-Kit 服务配置下，对三种模式分别做了 Nsight Systems profile 和关闭 profile 的五轮吞吐测试：
