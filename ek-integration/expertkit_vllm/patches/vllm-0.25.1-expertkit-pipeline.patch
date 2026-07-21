@@ -1,0 +1,345 @@
+--- a/vllm/v1/worker/ubatching.py
++++ b/vllm/v1/worker/ubatching.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ import threading
++from collections import deque
+ 
+ import torch
+ 
+@@ -17,6 +18,102 @@
+ _CURRENT_CONTEXTS: list["UBatchContext | None"] = []
+ 
+ 
++class UBatchAborted(RuntimeError):
++    """Raised in sibling uBatch threads after one uBatch fails."""
++
++
++class UBatchCoordinator:
++    """Completion-driven single-runner scheduler for uBatch threads.
++
++    vLLM's forward context is process-global, so at most one Python model
++    thread may run at a time. Unlike the original ring, this coordinator can
++    leave an uBatch blocked on an external Future and schedule whichever
++    uBatch becomes ready first.
++    """
++
++    def __init__(self, num_ubatches: int):
++        self._condition = threading.Condition()
++        self._ready = deque(range(num_ubatches))
++        self._ready_set = set(range(num_ubatches))
++        self._active: int | None = None
++        self._finished: set[int] = set()
++        self._failure: BaseException | None = None
++
++    def _schedule_locked(self) -> None:
++        if self._active is not None:
++            return
++        while self._ready:
++            candidate = self._ready.popleft()
++            self._ready_set.discard(candidate)
++            if candidate not in self._finished:
++                self._active = candidate
++                break
++        self._condition.notify_all()
++
++    def _raise_if_failed_locked(self) -> None:
++        if self._failure is not None:
++            raise UBatchAborted("another uBatch failed") from self._failure
++
++    def enter(self, ubatch_id: int) -> None:
++        with self._condition:
++            self._schedule_locked()
++            while self._active != ubatch_id:
++                self._raise_if_failed_locked()
++                self._condition.wait()
++
++    def yield_(self, ubatch_id: int) -> None:
++        with self._condition:
++            assert self._active == ubatch_id
++            if ubatch_id not in self._ready_set:
++                self._ready.append(ubatch_id)
++                self._ready_set.add(ubatch_id)
++            self._active = None
++            self._schedule_locked()
++            while self._active != ubatch_id:
++                self._raise_if_failed_locked()
++                self._condition.wait()
++
++    def wait_for_future(self, ubatch_id: int, future) -> None:
++        if future.done():
++            return
++
++        def mark_ready(_future) -> None:
++            with self._condition:
++                if (
++                    ubatch_id not in self._finished
++                    and ubatch_id not in self._ready_set
++                    and self._active != ubatch_id
++                ):
++                    self._ready.append(ubatch_id)
++                    self._ready_set.add(ubatch_id)
++                self._schedule_locked()
++
++        with self._condition:
++            assert self._active == ubatch_id
++            # grpc.Future and concurrent.futures.Future both invoke callbacks
++            # immediately when completion raced with callback registration.
++            self._active = None
++            future.add_done_callback(mark_ready)
++            self._schedule_locked()
++            while self._active != ubatch_id:
++                self._raise_if_failed_locked()
++                self._condition.wait()
++
++    def finish(self, ubatch_id: int) -> None:
++        with self._condition:
++            self._finished.add(ubatch_id)
++            self._ready_set.discard(ubatch_id)
++            if self._active == ubatch_id:
++                self._active = None
++            self._schedule_locked()
++
++    def abort(self, exc: BaseException) -> None:
++        with self._condition:
++            if self._failure is None:
++                self._failure = exc
++            self._condition.notify_all()
++
++
+ class UBatchContext:
+     """
+     Context manager for micro-batching synchronization using threading events.
+@@ -33,6 +130,7 @@
+         cpu_signal_event: threading.Event,
+         gpu_comm_done_event: torch.Event,
+         gpu_compute_done_event: torch.Event,
++        coordinator: UBatchCoordinator,
+         schedule: str = "default",
+     ):
+         self.id = id
+@@ -45,6 +143,7 @@
+         self.current_stream = compute_stream
+         self.gpu_comm_done_event = gpu_comm_done_event
+         self.gpu_compute_done_event = gpu_compute_done_event
++        self.coordinator = coordinator
+         self.schedule = schedule
+         self.recv_hook = None
+ 
+@@ -55,8 +154,7 @@
+         # _NUM_UBATCHES is set in make_ubatch_contexts
+         self.ready_barrier.wait()
+ 
+-        self.cpu_wait_event.wait()
+-        self.cpu_wait_event.clear()
++        self.coordinator.enter(self.id)
+         self._restore_context()
+         # Assume we want to start on the compute stream
+         self.update_stream(self.compute_stream)
+@@ -66,9 +164,11 @@
+         global _CURRENT_CONTEXTS, _THREAD_ID_TO_CONTEXT
+         _CURRENT_CONTEXTS[self.id] = None
+         del _THREAD_ID_TO_CONTEXT[threading.get_ident()]
+-        self.maybe_run_recv_hook()
+-        self.cpu_signal_event.set()
+-        self.cpu_wait_event.clear()
++        if exc_val is None:
++            self.maybe_run_recv_hook()
++            self.coordinator.finish(self.id)
++        else:
++            self.coordinator.abort(exc_val)
+         return False
+ 
+     def _restore_context(self):
+@@ -97,12 +197,14 @@
+         # thread running before waking the other one up and going to sleep
+         assert forward_context._forward_context == self.forward_context
+         assert current_stream() == self.current_stream
+-        assert not self.cpu_wait_event.is_set()
++        self.coordinator.yield_(self.id)
++        self._restore_context()
+ 
+-        self.cpu_signal_event.set()
+-        self.cpu_wait_event.wait()
+-        self.cpu_wait_event.clear()
++    def wait_for_future(self, future):
++        self.current_stream = current_stream()
++        self.coordinator.wait_for_future(self.id, future)
+         self._restore_context()
++        self.update_stream(self.current_stream)
+ 
+     def switch_to_comm(self):
+         self.update_stream(self.comm_stream)
+@@ -162,7 +264,7 @@
+         if len(_THREAD_ID_TO_CONTEXT) > 0:
+             ctx_idx = _THREAD_ID_TO_CONTEXT[threading.get_ident()]
+             ctx = _CURRENT_CONTEXTS[ctx_idx]
+-            func(ctx, *args, **kwargs)
++            return func(ctx, *args, **kwargs)
+ 
+     return wrapper
+ 
+@@ -183,6 +285,15 @@
+ )
+ 
+ 
++def dbo_wait_for_future(future):
++    """Suspend the current uBatch until an external Future is complete."""
++    if len(_THREAD_ID_TO_CONTEXT) > 0:
++        ctx_idx = _THREAD_ID_TO_CONTEXT[threading.get_ident()]
++        ctx = _CURRENT_CONTEXTS[ctx_idx]
++        ctx.wait_for_future(future)
++    return future.result()
++
++
+ def dbo_register_recv_hook(recv_hook):
+     if len(_THREAD_ID_TO_CONTEXT) > 0:
+         ctx_idx = _THREAD_ID_TO_CONTEXT[threading.get_ident()]
+@@ -219,6 +330,7 @@
+     Create a context manager for micro-batching synchronization.
+     """
+     cpu_events = [threading.Event() for _ in range(num_micro_batches)]
++    coordinator = UBatchCoordinator(num_micro_batches)
+     gpu_comm_done_events = [torch.Event() for _ in range(num_micro_batches)]
+     gpu_compute_done_events = [torch.Event() for _ in range(num_micro_batches)]
+ 
+@@ -234,6 +346,7 @@
+             cpu_signal_event=cpu_events[(i + 1) % num_micro_batches],
+             gpu_comm_done_event=gpu_comm_done_events[i],
+             gpu_compute_done_event=gpu_compute_done_events[i],
++            coordinator=coordinator,
+             schedule=schedule,
+         )
+         ctxs.append(ctx)
+--- a/vllm/v1/worker/gpu_ubatch_wrapper.py
++++ b/vllm/v1/worker/gpu_ubatch_wrapper.py
+@@ -304,17 +304,21 @@
+ 
+     def _run_ubatches(self, ubatch_metadata, model) -> torch.Tensor:
+         @torch.inference_mode()
+-        def _ubatch_thread(results, model, ubatch_metadata):
+-            with ubatch_metadata.context:
+-                model_output = model(
+-                    input_ids=ubatch_metadata.input_ids,
+-                    positions=ubatch_metadata.positions,
+-                    intermediate_tensors=ubatch_metadata.intermediate_tensors,
+-                    inputs_embeds=ubatch_metadata.inputs_embeds,
+-                )
+-            results.append((ubatch_metadata.context.id, model_output))
++        def _ubatch_thread(results, errors, model, ubatch_metadata):
++            try:
++                with ubatch_metadata.context:
++                    model_output = model(
++                        input_ids=ubatch_metadata.input_ids,
++                        positions=ubatch_metadata.positions,
++                        intermediate_tensors=ubatch_metadata.intermediate_tensors,
++                        inputs_embeds=ubatch_metadata.inputs_embeds,
++                    )
++                results.append((ubatch_metadata.context.id, model_output))
++            except BaseException as exc:
++                errors.append((ubatch_metadata.context.id, exc))
+ 
+         results: list[tuple[int, torch.Tensor]] = []
++        errors: list[tuple[int, BaseException]] = []
+ 
+         # Ubatch threads will manually manage the forward context, so we
+         # override it to None here so we can have it restored correctly
+@@ -326,6 +330,7 @@
+                     target=_ubatch_thread,
+                     args=(
+                         results,
++                        errors,
+                         model,
+                         metadata,
+                     ),
+@@ -336,6 +341,9 @@
+             ubatch_metadata[0].context.cpu_wait_event.set()
+             for thread in ubatch_threads:
+                 thread.join()
++        if errors:
++            errors.sort(key=lambda item: item[0])
++            raise errors[0][1]
+         sorted_results = [value for position, value in sorted(results)]
+         result = _cat_ubatch_outputs(sorted_results)
+         return result
+@@ -472,13 +480,12 @@
+         inputs_embeds = kwargs["inputs_embeds"]
+         compute_stream = torch.cuda.current_stream()
+ 
+-        dp_metadata = forward_context.dp_metadata
+-
+-        # We shouldn't be here unless we are running with multiple DP ranks
+-        assert dp_metadata is not None
+         ubatch_dp_metadata = []
+         for ubatch_slice in ubatch_slices:
+             dp_size = self.vllm_config.parallel_config.data_parallel_size
++            if dp_size == 1:
++                ubatch_dp_metadata.append(None)
++                continue
+             ubatch_num_tokens_across_dp = torch.tensor(
+                 [ubatch_slice.num_tokens] * dp_size, device="cpu", dtype=torch.int32
+             )
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -3929,6 +3929,25 @@
+                 # Assert to make sure the agreed upon token count is correct otherwise
+                 # num_tokens_across_dp will no-longer be valid
+                 assert batch_descriptor.num_tokens == num_tokens_padded
++        else:
++            # Expert-Kit can overlap remote expert RPCs without data
++            # parallelism. Native DBO historically gated uBatching on DP > 1,
++            # even though UBatchWrapper itself supports a single DP rank.
++            should_ubatch = (
++                allow_microbatching
++                and uniform_decode
++                and num_tokens_padded >= self.parallel_config.num_ubatches
++                and len(num_scheduled_tokens_np) >= self.parallel_config.num_ubatches
++                and check_ubatch_thresholds(
++                    config=self.parallel_config,
++                    num_tokens=num_tokens,
++                    uniform_decode=uniform_decode,
++                )
++            )
++            if should_ubatch:
++                num_tokens_across_dp = torch.tensor(
++                    [num_tokens_padded], device="cpu", dtype=torch.int32
++                )
+ 
+         cudagraph_stats = None
+         if self.vllm_config.observability_config.cudagraph_metrics:
+--- a/vllm/config/vllm.py
++++ b/vllm/config/vllm.py
+@@ -1460,18 +1460,20 @@
+ 
+         if self.parallel_config.use_ubatching:
+             a2a_backend = self.parallel_config.all2all_backend
+-            assert a2a_backend in [
+-                "deepep_low_latency",
+-                "deepep_high_throughput",
+-                "nixl_ep",
+-            ], (
+-                "Microbatching currently only supports the deepep_low_latency, "
+-                "deepep_high_throughput, and nixl_ep all2all backends. "
+-                f"{a2a_backend} is not supported. To fix use "
+-                "--all2all-backend=deepep_low_latency, "
+-                "--all2all-backend=deepep_high_throughput, or "
+-                "--all2all-backend=nixl_ep and install the matching kernels."
+-            )
++            external_expert_pipeline = os.getenv("EK_PIPELINE_ENABLE", "0") == "1"
++            if not external_expert_pipeline:
++                assert a2a_backend in [
++                    "deepep_low_latency",
++                    "deepep_high_throughput",
++                    "nixl_ep",
++                ], (
++                    "Microbatching currently only supports the deepep_low_latency, "
++                    "deepep_high_throughput, and nixl_ep all2all backends. "
++                    f"{a2a_backend} is not supported. To fix use "
++                    "--all2all-backend=deepep_low_latency, "
++                    "--all2all-backend=deepep_high_throughput, or "
++                    "--all2all-backend=nixl_ep and install the matching kernels."
++                )
+ 
+             if not self.model_config.disable_cascade_attn:
+                 self.model_config.disable_cascade_attn = True

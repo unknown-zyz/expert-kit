@@ -14,6 +14,7 @@ class EkClientConfig:
     controller_endpoint: str
     instance_id: int
     timeout_seconds: float
+    pipeline_enabled: bool
 
 
 def collect_ek_client_config() -> EkClientConfig:
@@ -36,4 +37,5 @@ def collect_ek_client_config() -> EkClientConfig:
         raise ValueError("EK_CLIENT_TIMEOUT must be numeric") from error
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
         raise ValueError("EK_CLIENT_TIMEOUT must be finite and positive")
-    return EkClientConfig(endpoint, instance_id, timeout_seconds)
+    pipeline_enabled = os.getenv("EK_PIPELINE_ENABLE", "0") == "1"
+    return EkClientConfig(endpoint, instance_id, timeout_seconds, pipeline_enabled)

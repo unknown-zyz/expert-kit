@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from importlib.metadata import version
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,21 @@ def register() -> None:
 
     if os.getenv("EK_ENABLE") != "1":
         return
+
+    if os.getenv("EK_PIPELINE_ENABLE", "0") == "1":
+        installed_vllm = version("vllm")
+        if installed_vllm != "0.25.1":
+            raise RuntimeError(
+                "Expert Kit pipeline requires the versioned vLLM 0.25.1 patch; "
+                f"found {installed_vllm}"
+            )
+        from vllm.v1.worker import ubatching
+
+        if not hasattr(ubatching, "dbo_wait_for_future"):
+            raise RuntimeError(
+                "Expert Kit pipeline patch is not applied; run "
+                "scripts/apply_vllm_pipeline_patch.py --apply"
+            )
 
     import vllm.model_executor.layers.fused_moe as fused_moe_package
     import vllm.model_executor.layers.fused_moe.layer as fused_moe_layer

@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 from expertkit_vllm import plugin
 
 
@@ -17,6 +19,9 @@ def install_fake_vllm_modules(monkeypatch):
             "vllm.model_executor.layers",
             "vllm.model_executor.layers.fused_moe",
             "vllm.model_executor.layers.fused_moe.layer",
+            "vllm.v1",
+            "vllm.v1.worker",
+            "vllm.v1.worker.ubatching",
         )
     }
     remote = types.ModuleType("expertkit_vllm.experts.remote_moe")
@@ -27,6 +32,7 @@ def install_fake_vllm_modules(monkeypatch):
     remote.remote_fused_moe = remote_fused_moe
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
+    modules["vllm.v1.worker"].ubatching = modules["vllm.v1.worker.ubatching"]
     monkeypatch.setitem(sys.modules, "expertkit_vllm.experts.remote_moe", remote)
     return modules, remote_fused_moe
 
@@ -50,6 +56,30 @@ def test_register_is_inert_unless_explicitly_enabled(monkeypatch) -> None:
     plugin.register()
 
     assert not hasattr(modules["vllm.model_executor.layers.fused_moe"], "FusedMoE")
+
+
+def test_pipeline_requires_versioned_patch_api(monkeypatch) -> None:
+    install_fake_vllm_modules(monkeypatch)
+    monkeypatch.setenv("EK_ENABLE", "1")
+    monkeypatch.setenv("EK_PIPELINE_ENABLE", "1")
+    monkeypatch.setattr(plugin, "version", lambda _name: "0.25.1")
+
+    with pytest.raises(RuntimeError, match="patch is not applied"):
+        plugin.register()
+
+
+def test_pipeline_registers_when_patch_api_is_present(monkeypatch) -> None:
+    modules, replacement = install_fake_vllm_modules(monkeypatch)
+    monkeypatch.setenv("EK_ENABLE", "1")
+    monkeypatch.setenv("EK_PIPELINE_ENABLE", "1")
+    monkeypatch.setattr(plugin, "version", lambda _name: "0.25.1")
+    modules["vllm.v1.worker.ubatching"].dbo_wait_for_future = (
+        lambda future: future.result()
+    )
+
+    plugin.register()
+
+    assert modules["vllm.model_executor.layers.fused_moe"].FusedMoE is replacement
 
 
 def test_remote_factory_matches_the_vllm_0251_parameter_surface() -> None:

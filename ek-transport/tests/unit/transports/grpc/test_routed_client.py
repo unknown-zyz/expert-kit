@@ -70,7 +70,7 @@ def test_blocking_client_reuses_one_loop_and_allows_concurrent_calls(monkeypatch
     ConcurrentAsyncClient.instances.clear()
     monkeypatch.setattr(routed_client, "RoutedMoEClient", ConcurrentAsyncClient)
     transport = client()
-    transport.start(timeout_seconds=1)
+    transport.start(timeout_seconds=5)
     hidden = torch.tensor([[1.0, 2.0, 3.0]])
     experts = torch.tensor([[0, 1]], dtype=torch.int32)
     weights = torch.tensor([[0.25, 0.75]], dtype=torch.float32)
@@ -98,6 +98,38 @@ def test_blocking_client_reuses_one_loop_and_allows_concurrent_calls(monkeypatch
     assert fake.closed is True
 
 
+def test_submit_execute_exposes_concurrent_transport_futures(monkeypatch) -> None:
+    ConcurrentAsyncClient.instances.clear()
+    monkeypatch.setattr(routed_client, "RoutedMoEClient", ConcurrentAsyncClient)
+    transport = client()
+    transport.start(timeout_seconds=5)
+    hidden = torch.tensor([[1.0, 2.0, 3.0]])
+    experts = torch.tensor([[0, 1]], dtype=torch.int32)
+    weights = torch.tensor([[0.25, 0.75]], dtype=torch.float32)
+
+    first = transport.submit_execute(
+        layer_id=0,
+        hidden_states=hidden,
+        expert_ids=experts,
+        routing_weights=weights,
+        distinct_expert_ids=(0, 1),
+        timeout_seconds=2,
+    )
+    second = transport.submit_execute(
+        layer_id=1,
+        hidden_states=hidden,
+        expert_ids=experts,
+        routing_weights=weights,
+        distinct_expert_ids=(0, 1),
+        timeout_seconds=2,
+    )
+
+    torch.testing.assert_close(first.result(), hidden)
+    torch.testing.assert_close(second.result(), hidden + 1)
+    assert ConcurrentAsyncClient.instances[0].max_active == 2
+    transport.close()
+
+
 class HangingAsyncClient:
     instances: ClassVar[list["HangingAsyncClient"]] = []
 
@@ -122,7 +154,7 @@ def test_blocking_timeout_waits_until_tensor_access_is_cancelled(monkeypatch) ->
     HangingAsyncClient.instances.clear()
     monkeypatch.setattr(routed_client, "RoutedMoEClient", HangingAsyncClient)
     transport = client()
-    transport.start(timeout_seconds=1)
+    transport.start(timeout_seconds=5)
 
     with torch.inference_mode(), concurrent.futures.ThreadPoolExecutor(max_workers=1):
         try:

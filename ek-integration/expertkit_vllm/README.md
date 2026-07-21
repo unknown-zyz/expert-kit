@@ -58,3 +58,25 @@ The plugin preserves vLLM's model router, including grouped or custom routing,
 and sends final `int32` expert assignments and FP32 routing weights through
 `expertkit-transport`. Transport returns the weighted, aggregated activation
 Tensor to the vLLM layer.
+
+## Four-uBatch Expert pipeline
+
+The optional Expert Kit pipeline lets a vLLM uBatch suspend on the asynchronous
+Transport Future while another ready uBatch runs Attention and routing. Install
+the versioned vLLM patch before enabling it:
+
+```bash
+python scripts/apply_vllm_pipeline_patch.py --apply
+python scripts/apply_vllm_pipeline_patch.py --check
+export EK_PIPELINE_ENABLE=1
+```
+
+Construct `LLM` with `enforce_eager=True`, `ubatch_size=4`, and both DBO
+thresholds set to zero. Do not also pass `enable_dbo=True`. The batch must be a
+uniform decode batch with at least four requests; other batches retain the
+compatible blocking behavior.
+
+Python Worker concurrency is controlled by
+`worker.max_active_batches_per_device`, not `EK_WORKER_THREADS`. See
+[`doc/ae-dbo-python-worker-pipeline.md`](../../doc/ae-dbo-python-worker-pipeline.md)
+for the architecture, patch lifecycle, configuration, and correctness tests.

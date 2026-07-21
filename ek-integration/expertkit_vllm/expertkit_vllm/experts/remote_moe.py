@@ -28,6 +28,16 @@ from vllm.utils.torch_utils import (
     direct_register_custom_op,
 )
 
+try:
+    from vllm.v1.worker.ubatching import dbo_wait_for_future
+except ImportError:
+    # Pipeline mode is rejected by plugin.register() before model construction
+    # when the versioned vLLM patch is absent. Keep the ordinary integration
+    # importable for users that do not enable the pipeline.
+    def dbo_wait_for_future(future):
+        return future.result()
+
+
 logger = logging.getLogger(__name__)
 
 _LAYER_PATTERN = re.compile(r"(?:^|\.)layers\.(\d+)(?:\.|$)")
@@ -242,14 +252,30 @@ class RemoteMoERunner(nn.Module):
             routing_weights,
             experts_per_layer=self.num_experts,
         )
-        routed_output = _client_for(self, hidden_states).execute(
-            layer_id=self.layer_id,
-            hidden_states=hidden_states,
-            expert_ids=expert_ids,
-            routing_weights=routing_weights,
-            distinct_expert_ids=distinct_expert_ids,
-            timeout_seconds=self.client_config.timeout_seconds,
-        )
+        client = _client_for(self, hidden_states)
+        if self.client_config.pipeline_enabled:
+            call = client.submit_execute(
+                layer_id=self.layer_id,
+                hidden_states=hidden_states,
+                expert_ids=expert_ids,
+                routing_weights=routing_weights,
+                distinct_expert_ids=distinct_expert_ids,
+                timeout_seconds=self.client_config.timeout_seconds,
+            )
+            # Inside a vLLM uBatch this suspends the current model thread and
+            # schedules the next ready uBatch. Outside DBO it remains a normal
+            # blocking Future wait, preserving small/mixed-batch fallback.
+            dbo_wait_for_future(call.future)
+            routed_output = call.result()
+        else:
+            routed_output = client.execute(
+                layer_id=self.layer_id,
+                hidden_states=hidden_states,
+                expert_ids=expert_ids,
+                routing_weights=routing_weights,
+                distinct_expert_ids=distinct_expert_ids,
+                timeout_seconds=self.client_config.timeout_seconds,
+            )
 
         shared_output: torch.Tensor | None = None
         if self.shared_experts is not None:

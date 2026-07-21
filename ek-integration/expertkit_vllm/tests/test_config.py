@@ -14,6 +14,14 @@ def test_collects_numeric_instance_and_timeout(monkeypatch) -> None:
     assert config.controller_endpoint == "127.0.0.1:50050"
     assert config.instance_id == 7
     assert config.timeout_seconds == 2.5
+    assert config.pipeline_enabled is False
+
+
+def test_collects_pipeline_switch(monkeypatch) -> None:
+    monkeypatch.setenv("EK_INSTANCE_ID", "7")
+    monkeypatch.setenv("EK_PIPELINE_ENABLE", "1")
+
+    assert collect_ek_client_config().pipeline_enabled is True
 
 
 @pytest.mark.parametrize(

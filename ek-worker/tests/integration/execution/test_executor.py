@@ -256,11 +256,12 @@ def test_execution_maps_ready_weight_failure_without_stopping_worker() -> None:
     run(scenario())
 
 
-def test_execution_limits_active_work_to_fixed_slots() -> None:
+@pytest.mark.parametrize("active", [1, 4])
+def test_execution_limits_active_work_to_fixed_slots(active: int) -> None:
     async def scenario() -> None:
-        backend = BlockingBackend(expected_active=2)
-        server, client, execution = await start_stack(backend, active=2, pending=2)
-        outputs = [torch.empty((2, 3), dtype=torch.float32) for _ in range(4)]
+        backend = BlockingBackend(expected_active=active)
+        server, client, execution = await start_stack(backend, active=active, pending=active)
+        outputs = [torch.empty((2, 3), dtype=torch.float32) for _ in range(active * 2)]
         submissions = [
             asyncio.create_task(
                 client.execute(
@@ -275,14 +276,19 @@ def test_execution_limits_active_work_to_fixed_slots() -> None:
             started = await asyncio.to_thread(backend.started.wait, 2)
             assert started is True
             async with asyncio.timeout(2):
-                await server._wait_pending_count(2)
-            assert len(backend.thread_names) == 2
-            assert server.active_count == 2
-            assert server.pending_count == 2
+                await server._wait_pending_count(active)
+            assert len(backend.thread_names) == active
+            assert server.active_count == active
+            assert server.pending_count == active
             backend.release.set()
             await asyncio.gather(*submissions)
 
-            assert len(backend.thread_names) == 4
+            assert len(backend.thread_names) == active * 2
+            for output in outputs:
+                torch.testing.assert_close(
+                    output,
+                    torch.tensor([[3, 6, 9], [12, 15, 18]], dtype=torch.float32),
+                )
         finally:
             backend.release.set()
             await asyncio.gather(*submissions, return_exceptions=True)

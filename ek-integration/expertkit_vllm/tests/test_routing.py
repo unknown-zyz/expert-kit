@@ -28,3 +28,16 @@ def test_remote_moe_validates_router_output_before_getting_client() -> None:
     ]
 
     assert calls.index("validate_and_convert_routing") < calls.index("_client_for")
+
+
+def test_pipeline_submits_before_waiting_for_transport_future() -> None:
+    source = (
+        Path(__file__).parents[1] / "expertkit_vllm" / "experts" / "remote_moe.py"
+    ).read_text(encoding="utf-8")
+
+    assert source.index("client.submit_execute(") < source.index(
+        "dbo_wait_for_future(call.future)"
+    )
+    assert source.index("dbo_wait_for_future(call.future)") < source.index(
+        "routed_output = call.result()"
+    )

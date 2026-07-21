@@ -8,6 +8,7 @@ import math
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 
@@ -22,6 +23,46 @@ _RESULT_GRACE_SECONDS = 0.1
 def _validate_timeout(timeout_seconds: float) -> None:
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be finite and positive")
+
+
+@dataclass(slots=True)
+class RoutedMoECall:
+    """One submitted routed layer whose result is consumed by a model thread.
+
+    The asynchronous Transport owns the returned Tensor until ``future`` is
+    complete.  CUDA output ordering is deliberately installed by
+    :meth:`result` on the caller's current stream; doing it in the private
+    event-loop thread would order the wrong stream.
+    """
+
+    future: concurrent.futures.Future[tuple[torch.Tensor, torch.cuda.Event | None]]
+    _completion: threading.Event
+    _timeout_seconds: float
+
+    def result(self) -> torch.Tensor:
+        """Wait for completion and make the result visible to this CUDA stream."""
+
+        try:
+            result, output_ready = self.future.result(
+                timeout=self._timeout_seconds + _RESULT_GRACE_SECONDS
+            )
+        except concurrent.futures.TimeoutError as error:
+            self.future.cancel()
+            self._completion.wait()
+            raise TransportError(
+                TransportErrorCode.DEADLINE_EXCEEDED,
+                retryable=False,
+                diagnostic="the blocking Routed-MoE call exceeded its deadline",
+            ) from error
+        if output_ready is not None:
+            torch.cuda.current_stream(result.device).wait_event(output_ready)
+        return result
+
+    def cancel(self) -> None:
+        """Request cancellation and wait until Transport releases input ownership."""
+
+        self.future.cancel()
+        self._completion.wait()
 
 
 class RoutedMoEClient:
@@ -219,7 +260,28 @@ class BlockingRoutedMoEClient:
         distinct_expert_ids: tuple[int, ...],
         timeout_seconds: float,
     ) -> torch.Tensor:
-        """Block the caller until one asynchronous routed-layer call is submitted."""
+        """Execute one routed layer through the backward-compatible blocking API."""
+
+        return self.submit_execute(
+            layer_id=layer_id,
+            hidden_states=hidden_states,
+            expert_ids=expert_ids,
+            routing_weights=routing_weights,
+            distinct_expert_ids=distinct_expert_ids,
+            timeout_seconds=timeout_seconds,
+        ).result()
+
+    def submit_execute(
+        self,
+        *,
+        layer_id: int,
+        hidden_states: torch.Tensor,
+        expert_ids: torch.Tensor,
+        routing_weights: torch.Tensor,
+        distinct_expert_ids: tuple[int, ...],
+        timeout_seconds: float,
+    ) -> RoutedMoECall:
+        """Submit one routed layer without blocking the framework model thread."""
 
         _validate_timeout(timeout_seconds)
         completion = threading.Event()
@@ -233,36 +295,32 @@ class BlockingRoutedMoEClient:
         if hidden_states.device.type == "cuda":
             input_ready = torch.cuda.Event(enable_timing=False, blocking=False)
             input_ready.record(torch.cuda.current_stream(hidden_states.device))
-        future = asyncio.run_coroutine_threadsafe(
-            self._execute(
-                client,
-                layer_id=layer_id,
-                hidden_states=hidden_states,
-                expert_ids=expert_ids,
-                routing_weights=routing_weights,
-                distinct_expert_ids=distinct_expert_ids,
-                monotonic_deadline=deadline,
-                input_ready=input_ready,
-                completion=completion,
-            ),
-            loop,
+        coroutine = self._execute(
+            client,
+            layer_id=layer_id,
+            hidden_states=hidden_states,
+            expert_ids=expert_ids,
+            routing_weights=routing_weights,
+            distinct_expert_ids=distinct_expert_ids,
+            monotonic_deadline=deadline,
+            input_ready=input_ready,
+            completion=completion,
         )
         try:
-            result, output_ready = future.result(timeout=timeout_seconds + _RESULT_GRACE_SECONDS)
-        except concurrent.futures.TimeoutError as error:
-            future.cancel()
-            completion.wait()
-            raise TransportError(
-                TransportErrorCode.DEADLINE_EXCEEDED,
-                retryable=False,
-                diagnostic="the blocking Routed-MoE call exceeded its deadline",
-            ) from error
-        finally:
+            future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+        except BaseException:
+            coroutine.close()
+            completion.set()
             with self._lock:
                 self._active.discard(completion)
-        if output_ready is not None:
-            torch.cuda.current_stream(result.device).wait_event(output_ready)
-        return result
+            raise
+
+        def discard_completed(_future: object) -> None:
+            with self._lock:
+                self._active.discard(completion)
+
+        future.add_done_callback(discard_completed)
+        return RoutedMoECall(future, completion, timeout_seconds)
 
     def close(self) -> None:
         """Reject new calls, close asynchronous resources, and join the loop thread."""
