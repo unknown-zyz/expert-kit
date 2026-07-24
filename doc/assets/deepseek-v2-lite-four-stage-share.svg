@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="962" viewBox="0 0 1320 962">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#1f2937}.title{font-size:21px;font-weight:700}.head{font-size:14px;font-weight:700}.cell{font-size:11px}.note{font-size:11px;fill:#4b5563}</style>
+<text x="28" y="32" class="title">DeepSeek-V2-Lite pipeline: per-layer four-stage work share</text>
+<text x="28" y="55" class="note">batch 64 · four uBatches · 31 profiled decode steps · cell = mean latency / share of A+A2E+E+E2A work</text>
+<rect x="150" y="67" width="252" height="24" rx="3" fill="#4C78A8" opacity="0.88"/>
+<text x="276.0" y="84" text-anchor="middle" class="head" style="fill:#ffffff">A</text>
+<rect x="410" y="67" width="252" height="24" rx="3" fill="#F59E0B" opacity="0.88"/>
+<text x="536.0" y="84" text-anchor="middle" class="head" style="fill:#ffffff">A2E</text>
+<rect x="670" y="67" width="252" height="24" rx="3" fill="#59A14F" opacity="0.88"/>
+<text x="796.0" y="84" text-anchor="middle" class="head" style="fill:#ffffff">E</text>
+<rect x="930" y="67" width="252" height="24" rx="3" fill="#E15759" opacity="0.88"/>
+<text x="1056.0" y="84" text-anchor="middle" class="head" style="fill:#ffffff">E2A</text>
+<text x="105" y="112" class="head">Layer 1</text>
+<rect x="150" y="94" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.160" stroke="#ffffff"/>
+<text x="276.0" y="112" text-anchor="middle" class="cell" style="fill:#172033">0.139 ms · 0.0%</text>
+<rect x="410" y="94" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.164" stroke="#ffffff"/>
+<text x="536.0" y="112" text-anchor="middle" class="cell" style="fill:#172033">2.334 ms · 0.4%</text>
+<rect x="670" y="94" width="252" height="26" rx="2" fill="#59A14F" opacity="0.274" stroke="#ffffff"/>
+<text x="796.0" y="112" text-anchor="middle" class="cell" style="fill:#172033">59.151 ms · 10.9%</text>
+<rect x="930" y="94" width="252" height="26" rx="2" fill="#E15759" opacity="0.940" stroke="#ffffff"/>
+<text x="1056.0" y="112" text-anchor="middle" class="cell" style="fill:#ffffff">480.300 ms · 88.6%</text>
+<text x="105" y="142" class="head">Layer 2</text>
+<rect x="150" y="124" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.161" stroke="#ffffff"/>
+<text x="276.0" y="142" text-anchor="middle" class="cell" style="fill:#172033">0.127 ms · 0.1%</text>
+<rect x="410" y="124" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.185" stroke="#ffffff"/>
+<text x="536.0" y="142" text-anchor="middle" class="cell" style="fill:#172033">2.698 ms · 2.4%</text>
+<rect x="670" y="124" width="252" height="26" rx="2" fill="#59A14F" opacity="0.692" stroke="#ffffff"/>
+<text x="796.0" y="142" text-anchor="middle" class="cell" style="fill:#ffffff">58.466 ms · 51.2%</text>
+<rect x="930" y="124" width="252" height="26" rx="2" fill="#E15759" opacity="0.642" stroke="#ffffff"/>
+<text x="1056.0" y="142" text-anchor="middle" class="cell" style="fill:#ffffff">52.952 ms · 46.4%</text>
+<text x="105" y="172" class="head">Layer 3</text>
+<rect x="150" y="154" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.161" stroke="#ffffff"/>
+<text x="276.0" y="172" text-anchor="middle" class="cell" style="fill:#172033">0.128 ms · 0.1%</text>
+<rect x="410" y="154" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.187" stroke="#ffffff"/>
+<text x="536.0" y="172" text-anchor="middle" class="cell" style="fill:#172033">2.703 ms · 2.6%</text>
+<rect x="670" y="154" width="252" height="26" rx="2" fill="#59A14F" opacity="0.739" stroke="#ffffff"/>
+<text x="796.0" y="172" text-anchor="middle" class="cell" style="fill:#ffffff">57.676 ms · 55.7%</text>
+<rect x="930" y="154" width="252" height="26" rx="2" fill="#E15759" opacity="0.593" stroke="#ffffff"/>
+<text x="1056.0" y="172" text-anchor="middle" class="cell" style="fill:#ffffff">43.107 ms · 41.6%</text>
+<text x="105" y="202" class="head">Layer 4</text>
+<rect x="150" y="184" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.161" stroke="#ffffff"/>
+<text x="276.0" y="202" text-anchor="middle" class="cell" style="fill:#172033">0.129 ms · 0.1%</text>
+<rect x="410" y="184" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.191" stroke="#ffffff"/>
+<text x="536.0" y="202" text-anchor="middle" class="cell" style="fill:#172033">2.813 ms · 3.0%</text>
+<rect x="670" y="184" width="252" height="26" rx="2" fill="#59A14F" opacity="0.789" stroke="#ffffff"/>
+<text x="796.0" y="202" text-anchor="middle" class="cell" style="fill:#ffffff">56.860 ms · 60.5%</text>
+<rect x="930" y="184" width="252" height="26" rx="2" fill="#E15759" opacity="0.538" stroke="#ffffff"/>
+<text x="1056.0" y="202" text-anchor="middle" class="cell" style="fill:#172033">34.150 ms · 36.3%</text>
+<text x="105" y="232" class="head">Layer 5</text>
+<rect x="150" y="214" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.161" stroke="#ffffff"/>
+<text x="276.0" y="232" text-anchor="middle" class="cell" style="fill:#172033">0.129 ms · 0.1%</text>
+<rect x="410" y="214" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.188" stroke="#ffffff"/>
+<text x="536.0" y="232" text-anchor="middle" class="cell" style="fill:#172033">2.823 ms · 2.7%</text>
+<rect x="670" y="214" width="252" height="26" rx="2" fill="#59A14F" opacity="0.718" stroke="#ffffff"/>
+<text x="796.0" y="232" text-anchor="middle" class="cell" style="fill:#ffffff">56.237 ms · 53.7%</text>
+<rect x="930" y="214" width="252" height="26" rx="2" fill="#E15759" opacity="0.613" stroke="#ffffff"/>
+<text x="1056.0" y="232" text-anchor="middle" class="cell" style="fill:#ffffff">45.630 ms · 43.5%</text>
+<text x="105" y="262" class="head">Layer 6</text>
+<rect x="150" y="244" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.161" stroke="#ffffff"/>
+<text x="276.0" y="262" text-anchor="middle" class="cell" style="fill:#172033">0.129 ms · 0.1%</text>
+<rect x="410" y="244" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.190" stroke="#ffffff"/>
+<text x="536.0" y="262" text-anchor="middle" class="cell" style="fill:#172033">2.850 ms · 2.8%</text>
+<rect x="670" y="244" width="252" height="26" rx="2" fill="#59A14F" opacity="0.748" stroke="#ffffff"/>
+<text x="796.0" y="262" text-anchor="middle" class="cell" style="fill:#ffffff">56.547 ms · 56.5%</text>
+<rect x="930" y="244" width="252" height="26" rx="2" fill="#E15759" opacity="0.581" stroke="#ffffff"/>
+<text x="1056.0" y="262" text-anchor="middle" class="cell" style="fill:#ffffff">40.508 ms · 40.5%</text>
+<text x="105" y="292" class="head">Layer 7</text>
+<rect x="150" y="274" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="292" text-anchor="middle" class="cell" style="fill:#172033">0.130 ms · 0.2%</text>
+<rect x="410" y="274" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.194" stroke="#ffffff"/>
+<text x="536.0" y="292" text-anchor="middle" class="cell" style="fill:#172033">2.860 ms · 3.3%</text>
+<rect x="670" y="274" width="252" height="26" rx="2" fill="#59A14F" opacity="0.837" stroke="#ffffff"/>
+<text x="796.0" y="292" text-anchor="middle" class="cell" style="fill:#ffffff">56.414 ms · 65.1%</text>
+<rect x="930" y="274" width="252" height="26" rx="2" fill="#E15759" opacity="0.487" stroke="#ffffff"/>
+<text x="1056.0" y="292" text-anchor="middle" class="cell" style="fill:#172033">27.215 ms · 31.4%</text>
+<text x="105" y="322" class="head">Layer 8</text>
+<rect x="150" y="304" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="322" text-anchor="middle" class="cell" style="fill:#172033">0.132 ms · 0.2%</text>
+<rect x="410" y="304" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.197" stroke="#ffffff"/>
+<text x="536.0" y="322" text-anchor="middle" class="cell" style="fill:#172033">2.775 ms · 3.5%</text>
+<rect x="670" y="304" width="252" height="26" rx="2" fill="#59A14F" opacity="0.893" stroke="#ffffff"/>
+<text x="796.0" y="322" text-anchor="middle" class="cell" style="fill:#ffffff">55.441 ms · 70.4%</text>
+<rect x="930" y="304" width="252" height="26" rx="2" fill="#E15759" opacity="0.429" stroke="#ffffff"/>
+<text x="1056.0" y="322" text-anchor="middle" class="cell" style="fill:#172033">20.352 ms · 25.9%</text>
+<text x="105" y="352" class="head">Layer 9</text>
+<rect x="150" y="334" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="352" text-anchor="middle" class="cell" style="fill:#172033">0.133 ms · 0.2%</text>
+<rect x="410" y="334" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.197" stroke="#ffffff"/>
+<text x="536.0" y="352" text-anchor="middle" class="cell" style="fill:#172033">2.886 ms · 3.5%</text>
+<rect x="670" y="334" width="252" height="26" rx="2" fill="#59A14F" opacity="0.885" stroke="#ffffff"/>
+<text x="796.0" y="352" text-anchor="middle" class="cell" style="fill:#ffffff">57.267 ms · 69.8%</text>
+<rect x="930" y="334" width="252" height="26" rx="2" fill="#E15759" opacity="0.436" stroke="#ffffff"/>
+<text x="1056.0" y="352" text-anchor="middle" class="cell" style="fill:#172033">21.815 ms · 26.6%</text>
+<text x="105" y="382" class="head">Layer 10</text>
+<rect x="150" y="364" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="382" text-anchor="middle" class="cell" style="fill:#172033">0.133 ms · 0.1%</text>
+<rect x="410" y="364" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.193" stroke="#ffffff"/>
+<text x="536.0" y="382" text-anchor="middle" class="cell" style="fill:#172033">2.908 ms · 3.2%</text>
+<rect x="670" y="364" width="252" height="26" rx="2" fill="#59A14F" opacity="0.807" stroke="#ffffff"/>
+<text x="796.0" y="382" text-anchor="middle" class="cell" style="fill:#ffffff">56.742 ms · 62.2%</text>
+<rect x="930" y="364" width="252" height="26" rx="2" fill="#E15759" opacity="0.518" stroke="#ffffff"/>
+<text x="1056.0" y="382" text-anchor="middle" class="cell" style="fill:#172033">31.438 ms · 34.5%</text>
+<text x="105" y="412" class="head">Layer 11</text>
+<rect x="150" y="394" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="412" text-anchor="middle" class="cell" style="fill:#172033">0.135 ms · 0.2%</text>
+<rect x="410" y="394" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.201" stroke="#ffffff"/>
+<text x="536.0" y="412" text-anchor="middle" class="cell" style="fill:#172033">2.803 ms · 4.0%</text>
+<rect x="670" y="394" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="412" text-anchor="middle" class="cell" style="fill:#ffffff">57.737 ms · 81.8%</text>
+<rect x="930" y="394" width="252" height="26" rx="2" fill="#E15759" opacity="0.306" stroke="#ffffff"/>
+<text x="1056.0" y="412" text-anchor="middle" class="cell" style="fill:#172033">9.947 ms · 14.1%</text>
+<text x="105" y="442" class="head">Layer 12</text>
+<rect x="150" y="424" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="442" text-anchor="middle" class="cell" style="fill:#172033">0.136 ms · 0.2%</text>
+<rect x="410" y="424" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.193" stroke="#ffffff"/>
+<text x="536.0" y="442" text-anchor="middle" class="cell" style="fill:#172033">2.813 ms · 3.2%</text>
+<rect x="670" y="424" width="252" height="26" rx="2" fill="#59A14F" opacity="0.839" stroke="#ffffff"/>
+<text x="796.0" y="442" text-anchor="middle" class="cell" style="fill:#ffffff">57.110 ms · 65.3%</text>
+<rect x="930" y="424" width="252" height="26" rx="2" fill="#E15759" opacity="0.486" stroke="#ffffff"/>
+<text x="1056.0" y="442" text-anchor="middle" class="cell" style="fill:#172033">27.392 ms · 31.3%</text>
+<text x="105" y="472" class="head">Layer 13</text>
+<rect x="150" y="454" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="472" text-anchor="middle" class="cell" style="fill:#172033">0.136 ms · 0.2%</text>
+<rect x="410" y="454" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.197" stroke="#ffffff"/>
+<text x="536.0" y="472" text-anchor="middle" class="cell" style="fill:#172033">2.834 ms · 3.6%</text>
+<rect x="670" y="454" width="252" height="26" rx="2" fill="#59A14F" opacity="0.901" stroke="#ffffff"/>
+<text x="796.0" y="472" text-anchor="middle" class="cell" style="fill:#ffffff">56.811 ms · 71.3%</text>
+<rect x="930" y="454" width="252" height="26" rx="2" fill="#E15759" opacity="0.420" stroke="#ffffff"/>
+<text x="1056.0" y="472" text-anchor="middle" class="cell" style="fill:#172033">19.952 ms · 25.0%</text>
+<text x="105" y="502" class="head">Layer 14</text>
+<rect x="150" y="484" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="502" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="484" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.199" stroke="#ffffff"/>
+<text x="536.0" y="502" text-anchor="middle" class="cell" style="fill:#172033">2.902 ms · 3.8%</text>
+<rect x="670" y="484" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="502" text-anchor="middle" class="cell" style="fill:#ffffff">58.537 ms · 75.8%</text>
+<rect x="930" y="484" width="252" height="26" rx="2" fill="#E15759" opacity="0.370" stroke="#ffffff"/>
+<text x="1056.0" y="502" text-anchor="middle" class="cell" style="fill:#172033">15.624 ms · 20.2%</text>
+<text x="105" y="532" class="head">Layer 15</text>
+<rect x="150" y="514" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="532" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="514" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.199" stroke="#ffffff"/>
+<text x="536.0" y="532" text-anchor="middle" class="cell" style="fill:#172033">2.913 ms · 3.8%</text>
+<rect x="670" y="514" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="532" text-anchor="middle" class="cell" style="fill:#ffffff">58.904 ms · 76.4%</text>
+<rect x="930" y="514" width="252" height="26" rx="2" fill="#E15759" opacity="0.364" stroke="#ffffff"/>
+<text x="1056.0" y="532" text-anchor="middle" class="cell" style="fill:#172033">15.128 ms · 19.6%</text>
+<text x="105" y="562" class="head">Layer 16</text>
+<rect x="150" y="544" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="562" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="544" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.201" stroke="#ffffff"/>
+<text x="536.0" y="562" text-anchor="middle" class="cell" style="fill:#172033">2.890 ms · 4.0%</text>
+<rect x="670" y="544" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="562" text-anchor="middle" class="cell" style="fill:#ffffff">58.610 ms · 80.2%</text>
+<rect x="930" y="544" width="252" height="26" rx="2" fill="#E15759" opacity="0.323" stroke="#ffffff"/>
+<text x="1056.0" y="562" text-anchor="middle" class="cell" style="fill:#172033">11.456 ms · 15.7%</text>
+<text x="105" y="592" class="head">Layer 17</text>
+<rect x="150" y="574" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="592" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="574" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.200" stroke="#ffffff"/>
+<text x="536.0" y="592" text-anchor="middle" class="cell" style="fill:#172033">2.985 ms · 3.8%</text>
+<rect x="670" y="574" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="592" text-anchor="middle" class="cell" style="fill:#ffffff">58.684 ms · 75.7%</text>
+<rect x="930" y="574" width="252" height="26" rx="2" fill="#E15759" opacity="0.371" stroke="#ffffff"/>
+<text x="1056.0" y="592" text-anchor="middle" class="cell" style="fill:#172033">15.760 ms · 20.3%</text>
+<text x="105" y="622" class="head">Layer 18</text>
+<rect x="150" y="604" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="622" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="604" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.196" stroke="#ffffff"/>
+<text x="536.0" y="622" text-anchor="middle" class="cell" style="fill:#172033">2.872 ms · 3.5%</text>
+<rect x="670" y="604" width="252" height="26" rx="2" fill="#59A14F" opacity="0.902" stroke="#ffffff"/>
+<text x="796.0" y="622" text-anchor="middle" class="cell" style="fill:#ffffff">58.624 ms · 71.4%</text>
+<rect x="930" y="604" width="252" height="26" rx="2" fill="#E15759" opacity="0.420" stroke="#ffffff"/>
+<text x="1056.0" y="622" text-anchor="middle" class="cell" style="fill:#172033">20.524 ms · 25.0%</text>
+<text x="105" y="652" class="head">Layer 19</text>
+<rect x="150" y="634" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="652" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="634" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.197" stroke="#ffffff"/>
+<text x="536.0" y="652" text-anchor="middle" class="cell" style="fill:#172033">2.871 ms · 3.5%</text>
+<rect x="670" y="634" width="252" height="26" rx="2" fill="#59A14F" opacity="0.895" stroke="#ffffff"/>
+<text x="796.0" y="652" text-anchor="middle" class="cell" style="fill:#ffffff">57.751 ms · 70.7%</text>
+<rect x="930" y="634" width="252" height="26" rx="2" fill="#E15759" opacity="0.427" stroke="#ffffff"/>
+<text x="1056.0" y="652" text-anchor="middle" class="cell" style="fill:#172033">20.974 ms · 25.7%</text>
+<text x="105" y="682" class="head">Layer 20</text>
+<rect x="150" y="664" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="682" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="664" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.194" stroke="#ffffff"/>
+<text x="536.0" y="682" text-anchor="middle" class="cell" style="fill:#172033">2.902 ms · 3.3%</text>
+<rect x="670" y="664" width="252" height="26" rx="2" fill="#59A14F" opacity="0.850" stroke="#ffffff"/>
+<text x="796.0" y="682" text-anchor="middle" class="cell" style="fill:#ffffff">58.374 ms · 66.4%</text>
+<rect x="930" y="664" width="252" height="26" rx="2" fill="#E15759" opacity="0.474" stroke="#ffffff"/>
+<text x="1056.0" y="682" text-anchor="middle" class="cell" style="fill:#172033">26.539 ms · 30.2%</text>
+<text x="105" y="712" class="head">Layer 21</text>
+<rect x="150" y="694" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="712" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="694" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.201" stroke="#ffffff"/>
+<text x="536.0" y="712" text-anchor="middle" class="cell" style="fill:#172033">2.941 ms · 3.9%</text>
+<rect x="670" y="694" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="712" text-anchor="middle" class="cell" style="fill:#ffffff">60.217 ms · 80.7%</text>
+<rect x="930" y="694" width="252" height="26" rx="2" fill="#E15759" opacity="0.318" stroke="#ffffff"/>
+<text x="1056.0" y="712" text-anchor="middle" class="cell" style="fill:#172033">11.364 ms · 15.2%</text>
+<text x="105" y="742" class="head">Layer 22</text>
+<rect x="150" y="724" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="742" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="724" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.201" stroke="#ffffff"/>
+<text x="536.0" y="742" text-anchor="middle" class="cell" style="fill:#172033">2.974 ms · 4.0%</text>
+<rect x="670" y="724" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="742" text-anchor="middle" class="cell" style="fill:#ffffff">59.693 ms · 80.0%</text>
+<rect x="930" y="724" width="252" height="26" rx="2" fill="#E15759" opacity="0.324" stroke="#ffffff"/>
+<text x="1056.0" y="742" text-anchor="middle" class="cell" style="fill:#172033">11.795 ms · 15.8%</text>
+<text x="105" y="772" class="head">Layer 23</text>
+<rect x="150" y="754" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="772" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="754" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.204" stroke="#ffffff"/>
+<text x="536.0" y="772" text-anchor="middle" class="cell" style="fill:#172033">2.892 ms · 4.3%</text>
+<rect x="670" y="754" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="772" text-anchor="middle" class="cell" style="fill:#ffffff">58.301 ms · 86.2%</text>
+<rect x="930" y="754" width="252" height="26" rx="2" fill="#E15759" opacity="0.256" stroke="#ffffff"/>
+<text x="1056.0" y="772" text-anchor="middle" class="cell" style="fill:#172033">6.267 ms · 9.3%</text>
+<text x="105" y="802" class="head">Layer 24</text>
+<rect x="150" y="784" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="802" text-anchor="middle" class="cell" style="fill:#172033">0.138 ms · 0.2%</text>
+<rect x="410" y="784" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.203" stroke="#ffffff"/>
+<text x="536.0" y="802" text-anchor="middle" class="cell" style="fill:#172033">2.900 ms · 4.1%</text>
+<rect x="670" y="784" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="802" text-anchor="middle" class="cell" style="fill:#ffffff">57.006 ms · 81.1%</text>
+<rect x="930" y="784" width="252" height="26" rx="2" fill="#E15759" opacity="0.311" stroke="#ffffff"/>
+<text x="1056.0" y="802" text-anchor="middle" class="cell" style="fill:#172033">10.215 ms · 14.5%</text>
+<text x="105" y="832" class="head">Layer 25</text>
+<rect x="150" y="814" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.162" stroke="#ffffff"/>
+<text x="276.0" y="832" text-anchor="middle" class="cell" style="fill:#172033">0.137 ms · 0.2%</text>
+<rect x="410" y="814" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.207" stroke="#ffffff"/>
+<text x="536.0" y="832" text-anchor="middle" class="cell" style="fill:#172033">2.810 ms · 4.5%</text>
+<rect x="670" y="814" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="832" text-anchor="middle" class="cell" style="fill:#ffffff">52.669 ms · 85.1%</text>
+<rect x="930" y="814" width="252" height="26" rx="2" fill="#E15759" opacity="0.265" stroke="#ffffff"/>
+<text x="1056.0" y="832" text-anchor="middle" class="cell" style="fill:#172033">6.269 ms · 10.1%</text>
+<text x="105" y="862" class="head">Layer 26</text>
+<rect x="150" y="844" width="252" height="26" rx="2" fill="#4C78A8" opacity="0.163" stroke="#ffffff"/>
+<text x="276.0" y="862" text-anchor="middle" class="cell" style="fill:#172033">0.136 ms · 0.3%</text>
+<rect x="410" y="844" width="252" height="26" rx="2" fill="#F59E0B" opacity="0.214" stroke="#ffffff"/>
+<text x="536.0" y="862" text-anchor="middle" class="cell" style="fill:#172033">2.674 ms · 5.2%</text>
+<rect x="670" y="844" width="252" height="26" rx="2" fill="#59A14F" opacity="0.940" stroke="#ffffff"/>
+<text x="796.0" y="862" text-anchor="middle" class="cell" style="fill:#ffffff">44.888 ms · 86.5%</text>
+<rect x="930" y="844" width="252" height="26" rx="2" fill="#E15759" opacity="0.244" stroke="#ffffff"/>
+<text x="1056.0" y="862" text-anchor="middle" class="cell" style="fill:#172033">4.200 ms · 8.1%</text>
+<text x="150" y="906" class="note">Percentages describe accumulated stage work; because micro-batches overlap, they are not end-to-end wall-time percentages.</text>
+</svg>

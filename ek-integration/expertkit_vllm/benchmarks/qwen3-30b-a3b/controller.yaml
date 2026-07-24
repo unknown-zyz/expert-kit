@@ -1,0 +1,27 @@
+inference:
+  hidden_dim: 2048
+  intermediate_dim: 768
+  instance_name: qwen3-30b-a3b-pipeline-bench
+  model_name: Qwen3-30B-A3B
+
+db:
+  db_dsn: postgres://dev@127.0.0.1:55432/dev
+  max_conn_size: 32
+
+weight:
+  server:
+    addr: http://127.0.0.1:6543
+  cache:
+    Fs:
+      path: /home/zhangyz/expert-kit/output/qwen3-30b-a3b-pipeline-dev-py/weight-cache
+
+controller:
+  listen: 127.0.0.1
+  broadcast: 127.0.0.1
+  ports:
+    intra: 5001
+    inter: 5002
+  fault_detection:
+    heartbeat_timeout_secs: 900
+    node_active_threshold_secs: 180
+    poller_interval_secs: 5

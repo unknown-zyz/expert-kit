@@ -1,6 +1,7 @@
 """Tests for explicit vLLM factory registration and version targeting."""
 
 import ast
+import os
 import sys
 import types
 from pathlib import Path
@@ -77,11 +78,22 @@ def test_pipeline_registers_when_patch_api_is_present(monkeypatch) -> None:
     modules["vllm.v1.worker.ubatching"].dbo_wait_for_future = (
         lambda future: future.result()
     )
-    modules["vllm.v1.worker.ubatching"].EXPERTKIT_PIPELINE_PATCH_VERSION = 2
+    modules["vllm.v1.worker.ubatching"].EXPERTKIT_PIPELINE_PATCH_VERSION = 3
 
     plugin.register()
 
     assert modules["vllm.model_executor.layers.fused_moe"].FusedMoE is replacement
+    assert os.environ["VLLM_USE_V2_MODEL_RUNNER"] == "0"
+
+
+def test_pipeline_rejects_v2_model_runner(monkeypatch) -> None:
+    install_fake_vllm_modules(monkeypatch)
+    monkeypatch.setenv("EK_ENABLE", "1")
+    monkeypatch.setenv("EK_PIPELINE_ENABLE", "1")
+    monkeypatch.setenv("VLLM_USE_V2_MODEL_RUNNER", "1")
+
+    with pytest.raises(RuntimeError, match="legacy GPU model runner"):
+        plugin.register()
 
 
 def test_remote_factory_matches_the_vllm_0251_parameter_surface() -> None:
@@ -164,3 +176,15 @@ def test_remote_expert_weight_sink_matches_vllm_loader_contract() -> None:
             expert_id=3,
             return_success=True,
         )
+
+
+def test_remote_runner_marks_qwen_packed_sink_parameters_initialized() -> None:
+    from expertkit_vllm.experts.remote_moe import RemoteMoERunner
+
+    loaded = RemoteMoERunner.load_weights(
+        object(), [("0.gate_proj.weight", torch.ones(2, 2))]
+    )
+
+    assert "0.gate_proj.weight" in loaded
+    assert "routed_experts.w13_weight" in loaded
+    assert "routed_experts.w2_weight" in loaded

@@ -20,6 +20,14 @@ from expertkit_transport.errors import (
     TransportErrorCode,
     TransportProtocolError,
 )
+from expertkit_transport.profile import (
+    ProfileContext,
+    enabled as profile_enabled,
+    nvtx_range,
+    nvtx_range_end,
+    nvtx_range_start,
+    profile_context_from_metadata,
+)
 from expertkit_transport.tracing import TraceContext, Tracer, TraceSpan
 from expertkit_transport.transports.base import (
     BatchBufferConfig,
@@ -78,6 +86,7 @@ class _GrpcReceivedBatch(ReceivedBatch):
         monotonic_deadline: float,
         retained_bytes: int,
         trace_context: TraceContext | None,
+        profile_context: ProfileContext | None = None,
     ) -> None:
         self._owner = owner
         self._batch: WorkerBatch | None = batch
@@ -87,7 +96,9 @@ class _GrpcReceivedBatch(ReceivedBatch):
         self._deadline = monotonic_deadline
         self.retained_bytes = retained_bytes
         self._trace_context = trace_context
+        self._profile_context = profile_context
         self._wait_span: TraceSpan | None = None
+        self._profile_wait_range: int | None = None
         self._cancelled = False
         self._cancelled_event = asyncio.Event()
         self.response: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
@@ -95,6 +106,10 @@ class _GrpcReceivedBatch(ReceivedBatch):
     @property
     def trace_context(self) -> TraceContext | None:
         return self._trace_context
+
+    @property
+    def profile_context(self) -> ProfileContext | None:
+        return self._profile_context
 
     @property
     def batch(self) -> WorkerBatch:
@@ -141,15 +156,27 @@ class _GrpcReceivedBatch(ReceivedBatch):
             attributes=_batch_trace_attributes(self.batch),
         )
 
+    def start_profile_wait(self) -> None:
+        """Start queue timing independently of optional OpenTelemetry."""
+
+        if self._profile_wait_range is not None:
+            raise RuntimeError("gRPC profiling wait range is already active")
+        self._profile_wait_range = nvtx_range_start(
+            "A2E_WORKER_QUEUE",
+            self._profile_context,
+        )
+
     def finish_wait_span(self, outcome: str) -> None:
         """Finish queue timing on take, cancellation, or receiver close."""
 
         span = self._wait_span
-        if span is None:
-            return
-        self._wait_span = None
-        span.set_attribute("expertkit.outcome", outcome)
-        span.end()
+        if span is not None:
+            self._wait_span = None
+            span.set_attribute("expertkit.outcome", outcome)
+            span.end()
+        profile_range = self._profile_wait_range
+        self._profile_wait_range = None
+        nvtx_range_end(profile_range)
 
 
 class GrpcWorkerBatchReceiver(WorkerBatchReceiver):
@@ -347,14 +374,28 @@ class GrpcWorkerBatchReceiver(WorkerBatchReceiver):
         if self._closing:
             self._record_rejection(TransportErrorCode.UNAVAILABLE.value)
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Worker is shutting down")
+        profile_context = None
+        if profile_enabled():
+            try:
+                metadata = tuple(
+                    (item.key, item.value) if hasattr(item, "key") else item
+                    for item in context.invocation_metadata()
+                )
+                profile_context = profile_context_from_metadata(metadata)
+            except ValueError as error:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+                raise AssertionError("context.abort must terminate the handler") from error
         trace_enabled = self._tracer is not None and self._tracer.current_span_is_recording()
         trace_context = self._tracer.capture_context() if trace_enabled else None
         try:
-            with self._trace_span(
-                "worker.request.decode",
-                attributes={"expertkit.request_bytes": len(payload)},
-                enabled=trace_enabled,
-            ) as span:
+            with (
+                nvtx_range("A2E_WORKER_DECODE", profile_context),
+                self._trace_span(
+                    "worker.request.decode",
+                    attributes={"expertkit.request_bytes": len(payload)},
+                    enabled=trace_enabled,
+                ) as span,
+            ):
                 decoded = await self._run_cpu(decode_request_with_size, payload, self._spec)
                 if span is not None:
                     for key, value in _batch_trace_attributes(decoded.batch).items():
@@ -373,6 +414,7 @@ class GrpcWorkerBatchReceiver(WorkerBatchReceiver):
             deadline,
             decoded.retained_tensor_bytes,
             trace_context,
+            profile_context,
         )
         rejection = await self._admit(item)
         if rejection is not None:
@@ -401,6 +443,8 @@ class GrpcWorkerBatchReceiver(WorkerBatchReceiver):
         )
         if rejection is None and self._tracer is not None and item.trace_context is not None:
             item.start_wait_span(self._tracer)
+        if rejection is None and item.profile_context is not None:
+            item.start_profile_wait()
         return rejection
 
     async def _cancel(self, item: _GrpcReceivedBatch) -> None:
@@ -425,9 +469,12 @@ class GrpcWorkerBatchReceiver(WorkerBatchReceiver):
             if not item.cancelled:
                 if partial_output.ndim != 2 or partial_output.shape[0] != item.token_count:
                     raise ValueError("partial output token count does not match the received batch")
-                with self._trace_span(
-                    "worker.response.encode",
-                    enabled=item.trace_context is not None,
+                with (
+                    nvtx_range("E2A_WORKER_ENCODE", item.profile_context),
+                    self._trace_span(
+                        "worker.response.encode",
+                        enabled=item.trace_context is not None,
+                    ),
                 ):
                     payload = await self._run_cpu(
                         encode_success_response,

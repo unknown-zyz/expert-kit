@@ -46,6 +46,7 @@ def load_sharegpt_samples(
     seed: int,
     min_prompt_tokens: int,
     max_prompt_tokens: int,
+    fixed_prompt_tokens: int | None = None,
 ) -> tuple[ShareGPTSample, ...]:
     """Select first-turn ShareGPT prompts using a local deterministic shuffle."""
 
@@ -74,6 +75,10 @@ def load_sharegpt_samples(
         token_ids = tuple(tokenizer(prompt, add_special_tokens=True).input_ids)
         if not min_prompt_tokens <= len(token_ids) <= max_prompt_tokens:
             continue
+        if fixed_prompt_tokens is not None:
+            if len(token_ids) < fixed_prompt_tokens:
+                continue
+            token_ids = token_ids[:fixed_prompt_tokens]
         selected.append(
             ShareGPTSample(
                 dataset_id=str(record.get("id", index)),
@@ -190,6 +195,10 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
 
     os.environ["EK_ENABLE"] = "1"
     os.environ["EK_PIPELINE_ENABLE"] = "1" if arguments.mode == "pipeline" else "0"
+    # Keep sync and pipeline measurements on the same runner. The reviewed
+    # four-stage vLLM patch targets the legacy GPU model runner, while vLLM
+    # 0.25.1 may otherwise auto-select its unpatched V2 runner.
+    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
 
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
@@ -202,6 +211,7 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
         seed=arguments.dataset_seed,
         min_prompt_tokens=arguments.min_prompt_tokens,
         max_prompt_tokens=arguments.max_prompt_tokens,
+        fixed_prompt_tokens=arguments.fixed_prompt_tokens,
     )
     manifest = [sample.manifest_entry() for sample in samples]
     llm = LLM(
@@ -211,9 +221,11 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
         dtype="bfloat16",
         enforce_eager=True,
         enable_prefix_caching=False,
+        disable_log_stats=False,
         max_model_len=arguments.max_model_len,
         max_num_seqs=max(arguments.batch_sizes),
-        max_num_batched_tokens=max(arguments.batch_sizes) * arguments.max_prompt_tokens,
+        max_num_batched_tokens=arguments.max_num_batched_tokens
+        or max(arguments.batch_sizes) * arguments.max_prompt_tokens,
         gpu_memory_utilization=arguments.gpu_memory_utilization,
         ubatch_size=4 if arguments.mode == "pipeline" else 0,
         dbo_decode_token_threshold=0,
@@ -272,7 +284,7 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
                 ),
             }
         )
-    return {
+    report = {
         "schema_version": 1,
         "mode": arguments.mode,
         "model": str(arguments.model.resolve()),
@@ -281,6 +293,9 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
         "generation_seed": arguments.generation_seed,
         "min_prompt_tokens": arguments.min_prompt_tokens,
         "max_prompt_tokens": arguments.max_prompt_tokens,
+        "fixed_prompt_tokens": arguments.fixed_prompt_tokens,
+        "max_num_batched_tokens": arguments.max_num_batched_tokens
+        or max(arguments.batch_sizes) * arguments.max_prompt_tokens,
         "output_tokens": arguments.output_tokens,
         "warmup_runs": arguments.warmup_runs,
         "measured_runs": arguments.runs,
@@ -290,6 +305,13 @@ def run_benchmark(arguments: argparse.Namespace) -> dict[str, object]:
         "deterministic": deterministic
         and all(batch["deterministic"] for batch in batches),
     }
+    # vLLM does not expose a stable public engine shutdown hook for this
+    # offline path. Close Expert Kit while the asyncio executor is still live;
+    # the registered atexit callback then becomes an idempotent no-op.
+    from expertkit_vllm.experts.remote_moe import close_clients
+
+    close_clients()
+    return report
 
 
 def compare_reports(
@@ -389,8 +411,18 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--generation-seed", type=int, default=0)
     run.add_argument("--min-prompt-tokens", type=_positive_int, default=4)
     run.add_argument("--max-prompt-tokens", type=_positive_int, default=512)
+    run.add_argument(
+        "--fixed-prompt-tokens",
+        type=_positive_int,
+        help="truncate every selected prompt to this exact token count",
+    )
     run.add_argument("--output-tokens", type=_positive_int, default=32)
     run.add_argument("--max-model-len", type=_positive_int, default=1024)
+    run.add_argument(
+        "--max-num-batched-tokens",
+        type=_positive_int,
+        help="override vLLM's scheduler token budget",
+    )
     run.add_argument("--warmup-runs", type=int, default=1)
     run.add_argument("--runs", type=_positive_int, default=5)
     run.add_argument("--gpu-memory-utilization", type=float, default=0.8)
@@ -410,6 +442,11 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("warmup-runs must be nonnegative")
         if not 0 < arguments.gpu_memory_utilization <= 1:
             raise ValueError("gpu-memory-utilization must be in (0, 1]")
+        if (
+            arguments.fixed_prompt_tokens is not None
+            and arguments.fixed_prompt_tokens > arguments.max_prompt_tokens
+        ):
+            raise ValueError("fixed-prompt-tokens cannot exceed max-prompt-tokens")
         report = run_benchmark(arguments)
         exit_code = 0 if report["deterministic"] else 2
     else:

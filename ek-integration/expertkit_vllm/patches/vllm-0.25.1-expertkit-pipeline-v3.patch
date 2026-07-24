@@ -1,0 +1,37 @@
+--- a/vllm/v1/worker/ubatching.py
++++ b/vllm/v1/worker/ubatching.py
+@@ -14,8 +14,8 @@
+ _THREAD_ID_TO_CONTEXT: dict = {}
+ # Here we hardcode the number of microbatches to 2 for default.
+ _NUM_UBATCHES: int = 2
+ _CURRENT_CONTEXTS: list["UBatchContext | None"] = []
+-EXPERTKIT_PIPELINE_PATCH_VERSION = 2
++EXPERTKIT_PIPELINE_PATCH_VERSION = 3
+ 
+ 
+ class UBatchAborted(RuntimeError):
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -2422,8 +2422,8 @@
+         # same metadata builder and KVCacheSpec is the same is the block table, so we
+         # can cache the attention metadata builds and just update the block table using
+         # `builder.update_block_table` if the builder supports it.
+         cached_attn_metadata: dict[
+-            tuple[KVCacheSpec, type[AttentionMetadataBuilder]], AttentionMetadata
++            tuple[KVCacheSpec, type[AttentionMetadataBuilder], int | None], AttentionMetadata
+         ] = {}
+ 
+         def _build_attn_group_metadata(
+@@ -2436,6 +2436,11 @@
+             if isinstance(kv_cache_spec, UniformTypeKVCacheSpecs):
+                 kv_cache_spec = kv_cache_spec.kv_cache_specs[attn_group.layer_names[0]]
+-            cache_key = (kv_cache_spec, type(builder))
++            # Each uBatch owns different request slices. Reusing metadata from
++            # another uBatch and replacing only its block table is invalid when
++            # the active request count is not divisible by num_ubatches: fields
++            # such as query_start_loc still describe the first uBatch's shape.
++            # Keep the native per-layer reuse, but isolate it by uBatch id.
++            cache_key = (kv_cache_spec, type(builder), ubid)
+ 
+             cascade_attn_prefix_len = (
+                 cascade_attn_prefix_lens[kv_cache_gid][attn_gid]

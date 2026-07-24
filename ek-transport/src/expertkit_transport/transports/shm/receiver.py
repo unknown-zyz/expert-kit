@@ -21,6 +21,7 @@ from expertkit_transport.errors import (
     TransportErrorCode,
     TransportProtocolError,
 )
+from expertkit_transport.profile import ProfileContext
 from expertkit_transport.tracing import TraceContext, Tracer, TraceSpan
 from expertkit_transport.transports.base import (
     BatchBufferConfig,
@@ -115,6 +116,10 @@ class _ShmReceivedBatch(ReceivedBatch):
     @property
     def trace_context(self) -> TraceContext | None:
         return self._trace_context
+
+    @property
+    def profile_context(self) -> ProfileContext | None:
+        return None
 
     @property
     def batch(self) -> WorkerBatch:

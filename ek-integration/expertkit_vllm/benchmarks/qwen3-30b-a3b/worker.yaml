@@ -1,0 +1,56 @@
+model:
+  instance_id: 1
+  name: Qwen3-30B-A3B
+  weight_version: main
+  num_layers: 48
+  experts_per_layer: 128
+  hidden_dim: 2048
+  expert_intermediate_dim: 768
+  top_k: 8
+  activation_dtype: bf16
+  weight_dtype: bf16
+
+worker:
+  id: qwen3-cpu-worker-0
+  backend: torch
+  device: cpu
+  max_batch_tokens: 4096
+  max_active_batches_per_device: 4
+  device_memory_limit: 96GiB
+  shutdown_grace_secs: 60
+
+transport:
+  type: grpc
+  max_pending_batches_per_device: 4
+  listen: 127.0.0.1:51061
+  advertise: 127.0.0.1:51061
+
+controller:
+  endpoint: 127.0.0.1:5001
+  heartbeat_interval_secs: 3
+  heartbeat_timeout_secs: 30
+
+weight_manager:
+  max_concurrent_loads: 64
+  dram_cache:
+    max_bytes: 64GiB
+  disk_cache:
+    path: /home/zhangyz/expert-kit/output/qwen3-30b-a3b-pipeline-dev-py/worker-cache
+    writeback: false
+  peer:
+    listen: 127.0.0.1:51062
+    advertise: http://127.0.0.1:51062
+  weight_server_endpoint: http://127.0.0.1:6543
+  state_report:
+    max_updates: 64
+    max_delay_ms: 50
+
+logging:
+  level: INFO
+  format: console
+
+observability:
+  prometheus:
+    enabled: false
+  tracing:
+    enabled: false

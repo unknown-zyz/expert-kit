@@ -38,7 +38,17 @@ UPGRADE_FILES = {
         "2c35138497a80573bdccaf07f810f386bde785eecc7ba8ffdf8b620989c33995",
     ),
 }
-ALL_FILES = tuple(dict.fromkeys((*CORE_FILES, *UPGRADE_FILES)))
+FINAL_FILES = {
+    "vllm/v1/worker/ubatching.py": (
+        "50ae00da430202e1588187dc26609bb4a76ded1d44e146e6b310ee29922e7e45",
+        "55c850b37c5845d5b11c32e36632f744591bafb76981e292b4d6162aea4101b2",
+    ),
+    "vllm/v1/worker/gpu_model_runner.py": (
+        "dbe5972a67424628e9ba24e04c9385928bcfa5fd7247bdd49cf0b449bd0bec44",
+        "915d5c8840f8c15c2af102c4f1752916d99e3c70e5e66e9886a6d3c342668ab2",
+    ),
+}
+ALL_FILES = tuple(dict.fromkeys((*CORE_FILES, *UPGRADE_FILES, *FINAL_FILES)))
 
 
 def digest(path: Path) -> str:
@@ -61,11 +71,24 @@ def state(root: Path) -> str:
         hashes[path] == values[0] for path, values in CORE_FILES.items()
     )
     legacy = all(hashes[path] == values[1] for path, values in CORE_FILES.items())
-    upgraded = all(
+    upgraded_v2 = all(
         hashes[path] == values[1]
         for path, values in CORE_FILES.items()
         if path != "vllm/v1/worker/ubatching.py"
     ) and all(hashes[path] == values[1] for path, values in UPGRADE_FILES.items())
+    upgraded = (
+        all(
+            hashes[path] == values[1]
+            for path, values in CORE_FILES.items()
+            if path not in FINAL_FILES
+        )
+        and all(
+            hashes[path] == values[1]
+            for path, values in UPGRADE_FILES.items()
+            if path not in FINAL_FILES
+        )
+        and all(hashes[path] == values[1] for path, values in FINAL_FILES.items())
+    )
     gpu_pristine = (
         hashes["vllm/v1/worker/gpu_worker.py"]
         == UPGRADE_FILES["vllm/v1/worker/gpu_worker.py"][0]
@@ -76,6 +99,8 @@ def state(root: Path) -> str:
         return "legacy-patched"
     if upgraded:
         return "patched"
+    if upgraded_v2:
+        return "v2-patched"
     details = ", ".join(f"{path}={value}" for path, value in hashes.items())
     raise RuntimeError(f"partial or unknown patch state: {details}")
 
@@ -120,15 +145,26 @@ def main() -> int:
     break_hardlinks(root)
     core_patch = "vllm-0.25.1-expertkit-pipeline.patch"
     upgrade_patch = "vllm-0.25.1-expertkit-pipeline-v2.patch"
+    final_patch = "vllm-0.25.1-expertkit-pipeline-v3.patch"
     if args.apply:
         if current == "pristine":
             run_patch(root, core_patch, reverse=False)
             current = state(root)
             if current != "legacy-patched":
                 raise RuntimeError(f"expected legacy-patched, found {current}")
-        run_patch(root, upgrade_patch, reverse=False)
+        if current == "legacy-patched":
+            run_patch(root, upgrade_patch, reverse=False)
+            current = state(root)
+            if current != "v2-patched":
+                raise RuntimeError(f"expected v2-patched, found {current}")
+        run_patch(root, final_patch, reverse=False)
     else:
         if current == "patched":
+            run_patch(root, final_patch, reverse=True)
+            current = state(root)
+            if current != "v2-patched":
+                raise RuntimeError(f"expected v2-patched, found {current}")
+        if current == "v2-patched":
             run_patch(root, upgrade_patch, reverse=True)
             current = state(root)
             if current != "legacy-patched":

@@ -12,6 +12,7 @@ from typing import Any
 import torch
 from expertkit_transport.batches import WorkerBatch
 from expertkit_transport.errors import TransportError, TransportErrorCode
+from expertkit_transport.profile import nvtx_range
 from expertkit_transport.tracing import Tracer, TraceSpan
 from expertkit_transport.transports.base import (
     BatchBufferConfig,
@@ -271,7 +272,11 @@ class ExecutionSlot:
         clock: Callable[[], float],
         tracer: Tracer | None,
     ) -> ExecutionResult:
-        with _trace_span(tracer, "worker.input.prepare"):
+        profile_context = received.profile_context
+        with (
+            nvtx_range("A2E_WORKER_INPUT", profile_context),
+            _trace_span(tracer, "worker.input.prepare"),
+        ):
             batch = self._copy_and_build_batch(
                 received,
                 source,
@@ -282,13 +287,16 @@ class ExecutionSlot:
         rejection = _request_end_error(received, clock)
         if rejection is not None:
             return self._set_result(None, rejection, None)
-        with _trace_span(tracer, "worker.backend.submit"):
+        with nvtx_range("E", profile_context), _trace_span(tracer, "worker.backend.submit"):
             completion = self._submit(backend, batch, output)
         try:
             with _trace_span(tracer, "worker.backend.wait"):
                 self._wait_completion(completion)
             rejection = _request_end_error(received, clock)
-            with _trace_span(tracer, "worker.output.prepare"):
+            with (
+                nvtx_range("E2A_WORKER_OUTPUT", profile_context),
+                _trace_span(tracer, "worker.output.prepare"),
+            ):
                 response_output = (
                     None
                     if rejection is not None
@@ -324,10 +332,14 @@ class ExecutionSlot:
             self._timing_events if batch_span is not None and batch_span.is_recording() else None
         )
         try:
+            profile_context = received.profile_context
             with torch.cuda.device(self._spec.device), torch.cuda.stream(stream):
                 if timing_events is not None:
                     timing_events[0].record(stream)
-                with _trace_span(tracer, "worker.input.prepare"):
+                with (
+                    nvtx_range("A2E_WORKER_INPUT", profile_context),
+                    _trace_span(tracer, "worker.input.prepare"),
+                ):
                     batch = self._copy_and_build_batch(
                         received,
                         source,
@@ -339,14 +351,20 @@ class ExecutionSlot:
                     timing_events[1].record(stream)
                 rejection = _request_end_error(received, clock)
                 if rejection is None:
-                    with _trace_span(tracer, "worker.backend.submit"):
+                    with (
+                        nvtx_range("E", profile_context),
+                        _trace_span(tracer, "worker.backend.submit"),
+                    ):
                         completion = self._submit(backend, batch, output)
                 if timing_events is not None:
                     timing_events[2].record(stream)
                 if completion is not None:
                     rejection = _request_end_error(received, clock)
                     if rejection is None:
-                        with _trace_span(tracer, "worker.output.prepare"):
+                        with (
+                            nvtx_range("E2A_WORKER_OUTPUT", profile_context),
+                            _trace_span(tracer, "worker.output.prepare"),
+                        ):
                             response_output = self._transport_buffers.copy_output(
                                 output,
                                 received.output_destination,

@@ -15,6 +15,12 @@ import torch
 from expertkit_transport.batches import RoutedLayerBatch
 from expertkit_transport.controller.topology import ControllerTopologyWatcher
 from expertkit_transport.errors import TransportError, TransportErrorCode
+from expertkit_transport.profile import (
+    ProfileContext,
+    bind_context,
+    nvtx_range,
+    reset_context,
+)
 from expertkit_transport.routing import RoundRobinSelector, execute_routed_layer
 
 _RESULT_GRACE_SECONDS = 0.1
@@ -259,6 +265,7 @@ class BlockingRoutedMoEClient:
         routing_weights: torch.Tensor,
         distinct_expert_ids: tuple[int, ...],
         timeout_seconds: float,
+        profile_context: ProfileContext | None = None,
     ) -> torch.Tensor:
         """Execute one routed layer through the backward-compatible blocking API."""
 
@@ -269,6 +276,7 @@ class BlockingRoutedMoEClient:
             routing_weights=routing_weights,
             distinct_expert_ids=distinct_expert_ids,
             timeout_seconds=timeout_seconds,
+            profile_context=profile_context,
         ).result()
 
     def submit_execute(
@@ -280,6 +288,7 @@ class BlockingRoutedMoEClient:
         routing_weights: torch.Tensor,
         distinct_expert_ids: tuple[int, ...],
         timeout_seconds: float,
+        profile_context: ProfileContext | None = None,
     ) -> RoutedMoECall:
         """Submit one routed layer without blocking the framework model thread."""
 
@@ -305,6 +314,7 @@ class BlockingRoutedMoEClient:
             monotonic_deadline=deadline,
             input_ready=input_ready,
             completion=completion,
+            profile_context=profile_context,
         )
         try:
             future = asyncio.run_coroutine_threadsafe(coroutine, loop)
@@ -378,22 +388,26 @@ class BlockingRoutedMoEClient:
         monotonic_deadline: float,
         input_ready: torch.cuda.Event | None,
         completion: threading.Event,
+        profile_context: ProfileContext | None,
     ) -> tuple[torch.Tensor, torch.cuda.Event | None]:
+        token = bind_context(profile_context)
         try:
-            if input_ready is not None:
-                torch.cuda.current_stream(hidden_states.device).wait_event(input_ready)
-            result = await client.execute(
-                layer_id=layer_id,
-                hidden_states=hidden_states,
-                expert_ids=expert_ids,
-                routing_weights=routing_weights,
-                distinct_expert_ids=distinct_expert_ids,
-                monotonic_deadline=monotonic_deadline,
-            )
-            output_ready: torch.cuda.Event | None = None
-            if result.device.type == "cuda":
-                output_ready = torch.cuda.Event(enable_timing=False, blocking=False)
-                output_ready.record(torch.cuda.current_stream(result.device))
-            return result, output_ready
+            with nvtx_range("A2E_CALL", profile_context):
+                if input_ready is not None:
+                    torch.cuda.current_stream(hidden_states.device).wait_event(input_ready)
+                result = await client.execute(
+                    layer_id=layer_id,
+                    hidden_states=hidden_states,
+                    expert_ids=expert_ids,
+                    routing_weights=routing_weights,
+                    distinct_expert_ids=distinct_expert_ids,
+                    monotonic_deadline=monotonic_deadline,
+                )
+                output_ready: torch.cuda.Event | None = None
+                if result.device.type == "cuda":
+                    output_ready = torch.cuda.Event(enable_timing=False, blocking=False)
+                    output_ready.record(torch.cuda.current_stream(result.device))
+                return result, output_ready
         finally:
+            reset_context(token)
             completion.set()

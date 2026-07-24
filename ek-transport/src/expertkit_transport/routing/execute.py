@@ -13,6 +13,7 @@ import torch
 from expertkit_transport.batches import RoutedLayerBatch
 from expertkit_transport.buffers import OutputPool
 from expertkit_transport.errors import TransportError, TransportErrorCode
+from expertkit_transport.profile import nvtx_range
 from expertkit_transport.routing.dispatch import (
     FailedWorkerBatch,
     dispatch_complete_plan,
@@ -181,8 +182,9 @@ async def execute_routed_layer(
     if monotonic_deadline - clock() <= 0:
         raise _deadline_error("the Routed layer deadline expired before dispatch")
 
-    snapshot = topology.current(batch.instance_id)
-    plans = group_worker_batches(batch, snapshot, selector)
+    with nvtx_range("A2E_GROUP"):
+        snapshot = topology.current(batch.instance_id)
+        plans = group_worker_batches(batch, snapshot, selector)
     if not plans:
         return torch.zeros_like(batch.hidden_states)
 

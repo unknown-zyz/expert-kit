@@ -50,6 +50,35 @@ def test_sharegpt_sampling_is_seeded_and_filters_lengths(tmp_path: Path) -> None
     assert all(4 <= len(sample.prompt_token_ids) <= 8 for sample in first)
 
 
+def test_sharegpt_sampling_can_truncate_to_uniform_token_length(
+    tmp_path: Path,
+) -> None:
+    records = [
+        {
+            "id": str(index),
+            "conversations": [
+                {"from": "human", "value": "x" * index},
+                {"from": "gpt", "value": "answer"},
+            ],
+        }
+        for index in range(6, 12)
+    ]
+    dataset = tmp_path / "sharegpt.json"
+    dataset.write_text(json.dumps(records), encoding="utf-8")
+
+    samples = load_sharegpt_samples(
+        dataset,
+        Tokenizer(),
+        count=3,
+        seed=0,
+        min_prompt_tokens=4,
+        max_prompt_tokens=12,
+        fixed_prompt_tokens=6,
+    )
+
+    assert all(len(sample.prompt_token_ids) == 6 for sample in samples)
+
+
 def _report(mode: str, token_ids: list[list[int]]) -> dict[str, object]:
     return {
         "mode": mode,

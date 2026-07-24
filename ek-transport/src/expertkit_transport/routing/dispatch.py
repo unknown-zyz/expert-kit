@@ -10,6 +10,7 @@ import torch
 
 from expertkit_transport.buffers import OutputPool
 from expertkit_transport.errors import TransportError
+from expertkit_transport.profile import nvtx_range
 from expertkit_transport.routing.grouping import WorkerBatchPlan
 from expertkit_transport.routing.topology import WorkerIdentity
 
@@ -55,16 +56,17 @@ async def _dispatch_plan(
                 lease.tensor[: plan.batch.token_count],
                 monotonic_deadline=monotonic_deadline,
             )
-            partial = lease.tensor[: plan.batch.token_count]
-            token_indices = plan.batch.token_indices
-            if token_indices is None:
-                token_indices = torch.arange(
-                    plan.batch.token_count,
-                    dtype=torch.int64,
-                    device=accumulator.device,
-                )
-            accumulator.index_add_(0, token_indices, partial.to(torch.float32))
-            lease.mark_consumed()
+            with nvtx_range("E2A_AGGREGATE"):
+                partial = lease.tensor[: plan.batch.token_count]
+                token_indices = plan.batch.token_indices
+                if token_indices is None:
+                    token_indices = torch.arange(
+                        plan.batch.token_count,
+                        dtype=torch.int64,
+                        device=accumulator.device,
+                    )
+                accumulator.index_add_(0, token_indices, partial.to(torch.float32))
+                lease.mark_consumed()
     except TransportError as error:
         return FailedWorkerBatch(plan=plan, error=error)
     return None

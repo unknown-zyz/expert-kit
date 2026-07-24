@@ -124,7 +124,11 @@ prefill/mixed-batch 调度。
 | `vllm/config/vllm.py` | 外部 Expert pipeline 不要求原生 All-to-All backend |
 
 plugin 在 `EK_PIPELINE_ENABLE=1` 时检查安装版本、patch version 和
-`dbo_wait_for_future`。补丁脚本对五个文件校验 SHA256；部分 patch 或未知
+`dbo_wait_for_future`，并强制 `VLLM_USE_V2_MODEL_RUNNER=0`。原因是 vLLM
+0.25.1 会自动选择新的 V2 Model Runner，而当前补丁修改的是 legacy
+`v1/worker/gpu_model_runner.py`；不固定 runner 会出现参数显示 `ubatch_size=4`
+但实际只有 uBatch 0 的静默失效。用户显式设置 V2 时 plugin 直接报错。
+补丁脚本对五个文件校验 SHA256；部分 patch 或未知
 site-packages 修改会直接失败。恢复原版：
 
 ```bash

@@ -1,0 +1,5 @@
+nodes:
+  - id: qwen3-cpu-worker-0
+    address: http://127.0.0.1:51061
+    channel: grpc
+    device: cpu

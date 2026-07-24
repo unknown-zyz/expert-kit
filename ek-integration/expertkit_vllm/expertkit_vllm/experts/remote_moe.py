@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import atexit
+import itertools
 import logging
+import os
 import re
 import threading
 from collections.abc import Callable, Iterable
@@ -11,6 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from expertkit_transport import BlockingRoutedMoEClient, validate_and_convert_routing
+from expertkit_transport.profile import (
+    ProfileContext,
+    enabled as profile_enabled,
+    nvtx_range,
+)
 from expertkit_vllm.utils.config import collect_ek_client_config
 from torch import nn
 from vllm.config import CUDAGraphMode, get_current_vllm_config
@@ -29,7 +36,7 @@ from vllm.utils.torch_utils import (
 )
 
 try:
-    from vllm.v1.worker.ubatching import dbo_wait_for_future
+    from vllm.v1.worker.ubatching import dbo_current_ubatch_id, dbo_wait_for_future
 except ImportError:
     # Pipeline mode is rejected by plugin.register() before model construction
     # when the versioned vLLM patch is absent. Keep the ordinary integration
@@ -37,12 +44,16 @@ except ImportError:
     def dbo_wait_for_future(future):
         return future.result()
 
+    def dbo_current_ubatch_id() -> int:
+        return 0
+
 
 logger = logging.getLogger(__name__)
 
 _LAYER_PATTERN = re.compile(r"(?:^|\.)layers\.(\d+)(?:\.|$)")
 _CLIENTS: dict[tuple[object, ...], BlockingRoutedMoEClient] = {}
 _CLIENTS_LOCK = threading.Lock()
+_PROFILE_CALLS = itertools.count()
 
 if TYPE_CHECKING:
     from typing import TypeAlias
@@ -270,19 +281,31 @@ class RemoteMoERunner(nn.Module):
         router_logits: torch.Tensor,
         input_ids: torch.Tensor | None,
     ) -> torch.Tensor:
-        if self.gate is not None:
-            router_logits = _unwrap_tensor(self.gate(hidden_states))
-        routing_weights, expert_ids = self.router.select_experts(
-            hidden_states,
-            router_logits,
-            topk_indices_dtype=torch.int32,
-            input_ids=input_ids,
+        profile_context = (
+            ProfileContext(
+                call_id=f"{os.getpid()}-{next(_PROFILE_CALLS)}",
+                microbatch_id=dbo_current_ubatch_id(),
+                layer_id=self.layer_id,
+            )
+            if profile_enabled()
+            else None
         )
-        expert_ids, routing_weights, distinct_expert_ids = validate_and_convert_routing(
-            expert_ids,
-            routing_weights,
-            experts_per_layer=self.num_experts,
-        )
+        with nvtx_range("A_LOCAL", profile_context):
+            if self.gate is not None:
+                router_logits = _unwrap_tensor(self.gate(hidden_states))
+            routing_weights, expert_ids = self.router.select_experts(
+                hidden_states,
+                router_logits,
+                topk_indices_dtype=torch.int32,
+                input_ids=input_ids,
+            )
+            expert_ids, routing_weights, distinct_expert_ids = (
+                validate_and_convert_routing(
+                    expert_ids,
+                    routing_weights,
+                    experts_per_layer=self.num_experts,
+                )
+            )
         client = _client_for(self, hidden_states)
         if self.client_config.pipeline_enabled:
             call = client.submit_execute(
@@ -292,6 +315,7 @@ class RemoteMoERunner(nn.Module):
                 routing_weights=routing_weights,
                 distinct_expert_ids=distinct_expert_ids,
                 timeout_seconds=self.client_config.timeout_seconds,
+                profile_context=profile_context,
             )
             # Inside a vLLM uBatch this suspends the current model thread and
             # schedules the next ready uBatch. Outside DBO it remains a normal
@@ -306,24 +330,36 @@ class RemoteMoERunner(nn.Module):
                 routing_weights=routing_weights,
                 distinct_expert_ids=distinct_expert_ids,
                 timeout_seconds=self.client_config.timeout_seconds,
+                profile_context=profile_context,
             )
 
-        shared_output: torch.Tensor | None = None
-        if self.shared_experts is not None:
-            shared_output = _unwrap_tensor(self.shared_experts(hidden_states))
-        if self.apply_routed_scale_to_output and self.routed_scaling_factor != 1.0:
-            if routed_output.dtype != torch.float16 or shared_output is None:
-                routed_output = routed_output * self.routed_scaling_factor
-            else:
-                shared_output = shared_output / self.routed_scaling_factor
-        if shared_output is not None:
-            routed_output = routed_output + shared_output
+        with nvtx_range("A_LOCAL_POST", profile_context):
+            shared_output: torch.Tensor | None = None
+            if self.shared_experts is not None:
+                shared_output = _unwrap_tensor(self.shared_experts(hidden_states))
+            if self.apply_routed_scale_to_output and self.routed_scaling_factor != 1.0:
+                if routed_output.dtype != torch.float16 or shared_output is None:
+                    routed_output = routed_output * self.routed_scaling_factor
+                else:
+                    shared_output = shared_output / self.routed_scaling_factor
+            if shared_output is not None:
+                routed_output = routed_output + shared_output
         return routed_output
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Consume remote expert checkpoint entries without retaining local weights."""
 
-        return {name for name, _ in weights}
+        consumed = {name for name, _ in weights}
+        # Qwen3-MoE delegates this complete submodule to AutoWeightsLoader. Its
+        # checkpoint names are per-expert gate/up/down projections, while the
+        # zero-storage compatibility parameters are the packed vLLM names.
+        # Report those sink parameters as initialized after consuming the
+        # checkpoint stream so vLLM's strict load tracker does not mistake the
+        # intentional remote weights for missing local tensors.
+        consumed.update(
+            {"routed_experts.w13_weight", "routed_experts.w2_weight"}
+        )
+        return consumed
 
     def update_expert_map(self) -> None:
         """Reject vLLM EPLB because Controller owns Expert Kit placement."""

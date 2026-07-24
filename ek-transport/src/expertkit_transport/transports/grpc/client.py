@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import math
 import time
 from collections.abc import Callable
@@ -20,6 +21,7 @@ from expertkit_transport.errors import (
     TransportErrorCode,
     TransportProtocolError,
 )
+from expertkit_transport.profile import grpc_metadata, nvtx_range
 from expertkit_transport.transports.base import WorkerEndpointConfig, WorkerTransport
 from expertkit_transport.transports.grpc.client_buffers import (
     GrpcTransferBufferPool,
@@ -102,41 +104,42 @@ def _encode_with_staging(
     buffers: GrpcTransferBuffers,
     stream: torch.cuda.Stream | None,
 ) -> bytes:
-    validate_worker_batch(batch, spec)
-    token_count = batch.token_count
-    with torch.inference_mode():
-        if stream is None:
-            hidden_states = _selected_hidden_states(batch)
-            buffers.host_hidden_states[:token_count].copy_(hidden_states)
-            buffers.host_expert_ids[:token_count].copy_(batch.expert_ids)
-            buffers.host_routing_weights[:token_count].copy_(batch.routing_weights)
-        else:
-            assert buffers.request_copy_event is not None
-            with torch.cuda.stream(stream):
+    with nvtx_range("A2E_ENCODE"):
+        validate_worker_batch(batch, spec)
+        token_count = batch.token_count
+        with torch.inference_mode():
+            if stream is None:
                 hidden_states = _selected_hidden_states(batch)
-                buffers.host_hidden_states[:token_count].copy_(
-                    hidden_states,
-                    non_blocking=True,
-                )
-                buffers.host_expert_ids[:token_count].copy_(
-                    batch.expert_ids,
-                    non_blocking=True,
-                )
-                buffers.host_routing_weights[:token_count].copy_(
-                    batch.routing_weights,
-                    non_blocking=True,
-                )
-                buffers.request_copy_event.record(stream)
-                buffers.request_copy_recorded = True
-            buffers.request_copy_event.synchronize()
+                buffers.host_hidden_states[:token_count].copy_(hidden_states)
+                buffers.host_expert_ids[:token_count].copy_(batch.expert_ids)
+                buffers.host_routing_weights[:token_count].copy_(batch.routing_weights)
+            else:
+                assert buffers.request_copy_event is not None
+                with torch.cuda.stream(stream):
+                    hidden_states = _selected_hidden_states(batch)
+                    buffers.host_hidden_states[:token_count].copy_(
+                        hidden_states,
+                        non_blocking=True,
+                    )
+                    buffers.host_expert_ids[:token_count].copy_(
+                        batch.expert_ids,
+                        non_blocking=True,
+                    )
+                    buffers.host_routing_weights[:token_count].copy_(
+                        batch.routing_weights,
+                        non_blocking=True,
+                    )
+                    buffers.request_copy_event.record(stream)
+                    buffers.request_copy_recorded = True
+                buffers.request_copy_event.synchronize()
 
-    return _serialize_host_request(
-        batch,
-        spec,
-        buffers.host_hidden_states[:token_count],
-        buffers.host_expert_ids[:token_count],
-        buffers.host_routing_weights[:token_count],
-    )
+        return _serialize_host_request(
+            batch,
+            spec,
+            buffers.host_hidden_states[:token_count],
+            buffers.host_expert_ids[:token_count],
+            buffers.host_routing_weights[:token_count],
+        )
 
 
 def _decode_into_output(
@@ -147,23 +150,24 @@ def _decode_into_output(
     output: torch.Tensor,
     stream: torch.cuda.Stream | None,
 ) -> None:
-    partial_output = decode_response(payload, token_count, spec)
-    if stream is None:
-        output[:token_count].copy_(partial_output)
-        return
+    with nvtx_range("E2A_DECODE"):
+        partial_output = decode_response(payload, token_count, spec)
+        if stream is None:
+            output[:token_count].copy_(partial_output)
+            return
 
-    assert buffers.receive_event is not None
-    assert buffers.host_partial_output is not None
-    if buffers.receive_recorded:
-        buffers.receive_event.synchronize()
-    buffers.host_partial_output[:token_count].copy_(partial_output)
-    with torch.cuda.stream(stream):
-        output[:token_count].copy_(
-            buffers.host_partial_output[:token_count],
-            non_blocking=True,
-        )
-        buffers.receive_event.record(stream)
-        buffers.receive_recorded = True
+        assert buffers.receive_event is not None
+        assert buffers.host_partial_output is not None
+        if buffers.receive_recorded:
+            buffers.receive_event.synchronize()
+        buffers.host_partial_output[:token_count].copy_(partial_output)
+        with torch.cuda.stream(stream):
+            output[:token_count].copy_(
+                buffers.host_partial_output[:token_count],
+                non_blocking=True,
+            )
+            buffers.receive_event.record(stream)
+            buffers.receive_recorded = True
 
 
 def _validate_output(
@@ -272,7 +276,8 @@ class GrpcWorkerTransport(WorkerTransport):
             raise RuntimeError("gRPC submission requires an asyncio Task")
         self._active.add(task)
         try:
-            buffers = await self._acquire(monotonic_deadline)
+            with nvtx_range("A2E_ADMISSION"):
+                buffers = await self._acquire(monotonic_deadline)
             try:
                 if self._closing:
                     raise TransportError(
@@ -354,20 +359,22 @@ class GrpcWorkerTransport(WorkerTransport):
         remaining = monotonic_deadline - self._clock()
         if remaining <= 0:
             raise _deadline_error("deadline expired before the Worker gRPC call")
-        call = self._execute(
-            request,
-            timeout=None if math.isinf(remaining) else remaining,
-            wait_for_ready=False,
-        )
-        try:
-            response = await call
-        except asyncio.CancelledError:
-            call.cancel()
-            with suppress(BaseException):
-                await call
-            raise
-        except grpc.aio.AioRpcError as error:
-            raise _rpc_error(error) from error
+        with nvtx_range("A2E_RPC"):
+            call = self._execute(
+                request,
+                timeout=None if math.isinf(remaining) else remaining,
+                wait_for_ready=False,
+                metadata=grpc_metadata(),
+            )
+            try:
+                response = await call
+            except asyncio.CancelledError:
+                call.cancel()
+                with suppress(BaseException):
+                    await call
+                raise
+            except grpc.aio.AioRpcError as error:
+                raise _rpc_error(error) from error
 
         try:
             await self._run_cpu(
@@ -388,7 +395,8 @@ class GrpcWorkerTransport(WorkerTransport):
 
     async def _run_cpu(self, function: Callable[..., Any], *args: object) -> Any:
         loop = asyncio.get_running_loop()
-        work = loop.run_in_executor(self._executor, function, *args)
+        context = contextvars.copy_context()
+        work = loop.run_in_executor(self._executor, context.run, function, *args)
         try:
             return await asyncio.shield(work)
         except asyncio.CancelledError:

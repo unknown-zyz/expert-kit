@@ -21,13 +21,13 @@ def test_remote_moe_validates_router_output_before_getting_client() -> None:
         for node in runner.body
         if isinstance(node, ast.FunctionDef) and node.name == "_forward_impl"
     )
-    calls = [
-        node.func.id
+    calls = {
+        node.func.id: (node.lineno, node.col_offset)
         for node in ast.walk(forward)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    ]
+    }
 
-    assert calls.index("validate_and_convert_routing") < calls.index("_client_for")
+    assert calls["validate_and_convert_routing"] < calls["_client_for"]
 
 
 def test_pipeline_submits_before_waiting_for_transport_future() -> None:

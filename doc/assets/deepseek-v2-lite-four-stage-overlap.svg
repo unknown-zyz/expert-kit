@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="626" viewBox="0 0 1480 626">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b23b2b"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#1f2937}.title{font-size:21px;font-weight:700}.row{font-size:15px;font-weight:700}.small{font-size:10px}.note{font-size:12px;fill:#4b5563}</style>
+<text x="28" y="32" class="title">DeepSeek-V2-Lite A → A2E → E → E2A pipeline overlap</text>
+<text x="28" y="56" class="note">representative layers 24–25; four micro-batches; all blocks use measured nsys timestamps and explicit borders</text>
+<line x1="145.00" y1="80" x2="145.00" y2="456" stroke="#e5e7eb"/>
+<text x="145.00" y="74" text-anchor="middle" class="small">0.0 ms</text>
+<line x1="359.17" y1="80" x2="359.17" y2="456" stroke="#e5e7eb"/>
+<text x="359.17" y="74" text-anchor="middle" class="small">37.9 ms</text>
+<line x1="573.33" y1="80" x2="573.33" y2="456" stroke="#e5e7eb"/>
+<text x="573.33" y="74" text-anchor="middle" class="small">75.8 ms</text>
+<line x1="787.50" y1="80" x2="787.50" y2="456" stroke="#e5e7eb"/>
+<text x="787.50" y="74" text-anchor="middle" class="small">113.7 ms</text>
+<line x1="1001.67" y1="80" x2="1001.67" y2="456" stroke="#e5e7eb"/>
+<text x="1001.67" y="74" text-anchor="middle" class="small">151.6 ms</text>
+<line x1="1215.83" y1="80" x2="1215.83" y2="456" stroke="#e5e7eb"/>
+<text x="1215.83" y="74" text-anchor="middle" class="small">189.4 ms</text>
+<line x1="1430.00" y1="80" x2="1430.00" y2="456" stroke="#e5e7eb"/>
+<text x="1430.00" y="74" text-anchor="middle" class="small">227.3 ms</text>
+<text x="28" y="146" class="row">A</text>
+<rect x="471.86" y="119" width="2.00" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 24, A: 0.119 ms</title></rect>
+<rect x="199.48" y="119" width="2.00" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 24, A: 0.120 ms</title></rect>
+<rect x="145.00" y="119" width="2.00" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 24, A: 0.150 ms</title></rect>
+<rect x="329.52" y="119" width="2.00" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 24, A: 0.124 ms</title></rect>
+<rect x="839.42" y="119" width="2.00" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 25, A: 0.119 ms</title></rect>
+<rect x="589.20" y="119" width="2.00" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 25, A: 0.122 ms</title></rect>
+<rect x="551.74" y="119" width="2.00" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 25, A: 0.148 ms</title></rect>
+<rect x="727.43" y="119" width="2.00" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 25, A: 0.124 ms</title></rect>
+<text x="28" y="232" class="row">A2E</text>
+<rect x="489.57" y="205" width="18.85" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 24, A2E: 3.335 ms</title></rect>
+<rect x="217.06" y="205" width="19.21" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 24, A2E: 3.398 ms</title></rect>
+<rect x="161.50" y="205" width="17.48" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 24, A2E: 3.093 ms</title></rect>
+<rect x="352.98" y="205" width="19.02" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 24, A2E: 3.364 ms</title></rect>
+<rect x="857.33" y="205" width="16.64" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 25, A2E: 2.945 ms</title></rect>
+<rect x="603.69" y="205" width="16.93" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 25, A2E: 2.995 ms</title></rect>
+<rect x="579.01" y="205" width="16.98" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 25, A2E: 3.003 ms</title></rect>
+<rect x="756.38" y="205" width="19.75" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 25, A2E: 3.494 ms</title></rect>
+<text x="28" y="318" class="row">E</text>
+<rect x="508.42" y="291" width="309.38" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 24, E: 54.732 ms</title></rect>
+<text x="663.11" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="663.11">u0 · L24</tspan><tspan x="663.11" dy="12">54.73 ms</tspan></text>
+<rect x="236.27" y="291" width="328.10" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 24, E: 58.044 ms</title></rect>
+<text x="400.32" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="400.32">u1 · L24</tspan><tspan x="400.32" dy="12">58.04 ms</tspan></text>
+<rect x="178.98" y="291" width="349.30" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 24, E: 61.794 ms</title></rect>
+<text x="353.63" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="353.63">u2 · L24</tspan><tspan x="353.63" dy="12">61.79 ms</tspan></text>
+<rect x="372.00" y="291" width="332.52" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 24, E: 58.826 ms</title></rect>
+<text x="538.26" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="538.26">u3 · L24</tspan><tspan x="538.26" dy="12">58.83 ms</tspan></text>
+<rect x="873.97" y="291" width="350.27" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 25, E: 61.966 ms</title></rect>
+<text x="1049.11" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="1049.11">u0 · L25</tspan><tspan x="1049.11" dy="12">61.97 ms</tspan></text>
+<rect x="620.61" y="291" width="392.62" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 25, E: 69.457 ms</title></rect>
+<text x="816.92" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="816.92">u1 · L25</tspan><tspan x="816.92" dy="12">69.46 ms</tspan></text>
+<rect x="595.99" y="291" width="309.87" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 25, E: 54.818 ms</title></rect>
+<text x="750.92" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="750.92">u2 · L25</tspan><tspan x="750.92" dy="12">54.82 ms</tspan></text>
+<rect x="776.13" y="291" width="326.80" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 25, E: 57.814 ms</title></rect>
+<text x="939.53" y="306" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="939.53">u3 · L25</tspan><tspan x="939.53" dy="12">57.81 ms</tspan></text>
+<text x="28" y="404" class="row">E2A</text>
+<rect x="817.80" y="377" width="19.85" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 24, E2A: 3.511 ms</title></rect>
+<rect x="564.37" y="377" width="20.06" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 24, E2A: 3.549 ms</title></rect>
+<rect x="528.28" y="377" width="21.73" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 24, E2A: 3.844 ms</title></rect>
+<rect x="704.52" y="377" width="20.35" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 24, E2A: 3.600 ms</title></rect>
+<rect x="1224.24" y="377" width="21.46" height="38" rx="3" fill="#4C78A8" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 0, layer 25, E2A: 3.796 ms</title></rect>
+<rect x="1013.23" y="377" width="23.67" height="38" rx="3" fill="#F28E5B" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 1, layer 25, E2A: 4.187 ms</title></rect>
+<rect x="905.86" y="377" width="524.14" height="38" rx="3" fill="#59A14F" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 2, layer 25, E2A: 92.725 ms</title></rect>
+<text x="1167.93" y="392" text-anchor="middle" class="small" style="fill:#ffffff;paint-order:stroke;stroke:#172033;stroke-width:1.4px"><tspan x="1167.93">u2 · L25</tspan><tspan x="1167.93" dy="12">92.73 ms</tspan></text>
+<rect x="1102.93" y="377" width="22.30" height="38" rx="3" fill="#B279A2" opacity="0.79" stroke="#172033" stroke-width="1.4" vector-effect="non-scaling-stroke"><title>uBatch 3, layer 25, E2A: 3.944 ms</title></rect>
+<path d="M 837.65 415.00 C 849.65 432.00, 827.42 102.00, 839.42 119.00" fill="none" stroke="#b23b2b" stroke-width="1.2" marker-end="url(#arrow)" opacity="0.75"/>
+<path d="M 584.43 415.00 C 596.43 432.00, 577.20 102.00, 589.20 119.00" fill="none" stroke="#b23b2b" stroke-width="1.2" marker-end="url(#arrow)" opacity="0.75"/>
+<path d="M 550.02 415.00 C 562.02 432.00, 539.74 102.00, 551.74 119.00" fill="none" stroke="#b23b2b" stroke-width="1.2" marker-end="url(#arrow)" opacity="0.75"/>
+<path d="M 724.87 415.00 C 736.87 432.00, 715.43 102.00, 727.43 119.00" fill="none" stroke="#b23b2b" stroke-width="1.2" marker-end="url(#arrow)" opacity="0.75"/>
+<rect x="145" y="490" width="18" height="18" rx="2" fill="#4C78A8" stroke="#172033"/>
+<text x="171" y="504" class="note">uBatch 0</text>
+<rect x="290" y="490" width="18" height="18" rx="2" fill="#F28E5B" stroke="#172033"/>
+<text x="316" y="504" class="note">uBatch 1</text>
+<rect x="435" y="490" width="18" height="18" rx="2" fill="#59A14F" stroke="#172033"/>
+<text x="461" y="504" class="note">uBatch 2</text>
+<rect x="580" y="490" width="18" height="18" rx="2" fill="#B279A2" stroke="#172033"/>
+<text x="606" y="504" class="note">uBatch 3</text>
+<text x="145" y="544" class="note">A2E hidden 98.5% · E2A hidden 99.7% · total exposed communication 476.5 ms</text>
+<text x="145" y="568" class="note">A uses active CUDA-kernel duration at its first measured kernel timestamp; A2E/E/E2A use their measured wall intervals.</text>
+</svg>

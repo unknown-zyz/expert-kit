@@ -10,6 +10,7 @@ import torch
 
 from expertkit_transport.batches import WorkerBatch
 from expertkit_transport.errors import TransportError
+from expertkit_transport.profile import ProfileContext
 from expertkit_transport.tracing import TraceContext
 
 _UINT32_MAX = (1 << 32) - 1
@@ -146,6 +147,12 @@ class ReceivedBatch(ABC):
     @abstractmethod
     def trace_context(self) -> TraceContext | None:
         """Return optional Host-only tracing context captured by Transport."""
+
+    @property
+    def profile_context(self) -> ProfileContext | None:
+        """Return optional nsys-only correlation for this physical batch."""
+
+        return None
 
     @property
     @abstractmethod
