@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import statistics
@@ -16,6 +17,30 @@ PROMPTS = [
     "In a distant future, humanity",
     "The key idea behind a pipeline is",
 ]
+
+
+def load_prompts(path: Path | None, limit: int | None = None) -> list[str]:
+    if path is None:
+        prompts = PROMPTS
+    else:
+        payload = json.loads(path.resolve(strict=True).read_text())
+        prompts = [
+            {"prompt_token_ids": item["prompt_token_ids"]}
+            if "prompt_token_ids" in item
+            else str(item["prompt"])
+            for item in payload["prompts"]
+        ]
+    if limit is not None:
+        prompts = prompts[:limit]
+    if not prompts:
+        raise ValueError("prompt manifest contains no prompts")
+    return prompts
+
+
+def manifest_digest(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return hashlib.sha256(path.resolve(strict=True).read_bytes()).hexdigest()
 
 
 def percentile95(values: list[float]) -> float:
@@ -53,6 +78,9 @@ def output_payload(outputs) -> list[dict]:
 
 
 def run_child(args: argparse.Namespace) -> None:
+    # The Expert-Kit four-stage patch targets the legacy v1 GPU model runner.
+    # Keep sync and pipeline on the same runner so the comparison is meaningful.
+    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
     pipeline_enabled = args.child_mode == "pipeline"
     os.environ["EK_PIPELINE_ENABLE"] = "1" if pipeline_enabled else "0"
     if pipeline_enabled and args.trace is not None:
@@ -72,6 +100,7 @@ def run_child(args: argparse.Namespace) -> None:
     if not model_value:
         raise RuntimeError("QWEN3_30B_A3B_ROOT is required")
     model_root = Path(model_value).expanduser().resolve(strict=True)
+    prompts = load_prompts(args.prompts_file)
 
     if args.nsys_capture:
         # Nsight Systems 2026.1 process-tree tracing can leave the short-lived
@@ -93,7 +122,7 @@ def run_child(args: argparse.Namespace) -> None:
     llm = LLM(
         model=str(model_root),
         trust_remote_code=True,
-        max_model_len=256,
+        max_model_len=args.max_model_len,
         enforce_eager=True,
         cpu_offload_gb=64,
         max_num_batched_tokens=1024,
@@ -104,7 +133,7 @@ def run_child(args: argparse.Namespace) -> None:
     )
     sampling = SamplingParams(temperature=0, max_tokens=args.max_tokens, seed=0)
     for _ in range(args.warmup):
-        llm.generate(PROMPTS, sampling, use_tqdm=False)
+        llm.generate(prompts, sampling, use_tqdm=False)
 
     runs = []
     for repetition in range(args.repetitions):
@@ -113,7 +142,7 @@ def run_child(args: argparse.Namespace) -> None:
             torch.cuda.nvtx.range_push("EK_PROFILE_WINDOW")
         started = time.perf_counter()
         try:
-            outputs = llm.generate(PROMPTS, sampling, use_tqdm=False)
+            outputs = llm.generate(prompts, sampling, use_tqdm=False)
             elapsed = time.perf_counter() - started
         finally:
             if capture:
@@ -140,8 +169,13 @@ def run_child(args: argparse.Namespace) -> None:
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         },
         "settings": {
-            "prompts": PROMPTS,
+            "prompts": prompts,
+            "prompt_manifest": str(args.prompts_file.resolve())
+            if args.prompts_file is not None
+            else None,
+            "prompt_manifest_sha256": manifest_digest(args.prompts_file),
             "max_tokens": args.max_tokens,
+            "max_model_len": args.max_model_len,
             "warmup": args.warmup,
             "repetitions": args.repetitions,
             "ubatch_size": 4 if pipeline_enabled else 0,
@@ -223,7 +257,11 @@ def run_parent(args: argparse.Namespace) -> None:
                 str(args.repetitions),
                 "--max-tokens",
                 str(args.max_tokens),
+                "--max-model-len",
+                str(args.max_model_len),
             ]
+            if args.prompts_file is not None:
+                command.extend(("--prompts-file", str(args.prompts_file)))
             if args.trace is not None:
                 command.extend(("--trace", str(args.trace)))
             if args.nsys_capture:
@@ -272,6 +310,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--max-tokens", type=int, default=32)
+    parser.add_argument("--max-model-len", type=int, default=2048)
+    parser.add_argument("--prompts-file", type=Path)
     parser.add_argument(
         "--nsys-capture",
         action="store_true",

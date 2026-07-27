@@ -85,6 +85,9 @@ def main() -> None:
     )
     parser.add_argument("--log-dir", type=Path, default=Path("/tmp/ek-nsys-logs"))
     parser.add_argument("--max-tokens", type=int, default=4)
+    parser.add_argument("--max-model-len", type=int, default=2048)
+    parser.add_argument("--client-timeout", type=int, default=600)
+    parser.add_argument("--prompts-file", type=Path)
     parser.add_argument(
         "--benchmark-output",
         type=Path,
@@ -124,7 +127,7 @@ def main() -> None:
             "EK_MODE": "expert_mode",
             "EK_ADDR": "localhost:5002",
             "EK_MODEL_NAME": "qwen3-30b-a3b",
-            "EK_CLIENT_TIMEOUT": "120",
+            "EK_CLIENT_TIMEOUT": str(args.client_timeout),
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "VLLM_NO_USAGE_STATS": "1",
@@ -181,7 +184,11 @@ def main() -> None:
             str(args.repetitions),
             "--max-tokens",
             str(args.max_tokens),
+            "--max-model-len",
+            str(args.max_model_len),
         ]
+        if args.prompts_file is not None:
+            command.extend(("--prompts-file", str(args.prompts_file.resolve(strict=True))))
         if not args.no_profile_window:
             command.append("--nsys-capture")
         subprocess.run(command, env=env, check=True, timeout=900)

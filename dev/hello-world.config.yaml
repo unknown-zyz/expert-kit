@@ -5,7 +5,7 @@ inference:
   model_name: qwen3-30b-a3b
 
 db:
-  db_dsn: postgres://dev:dev@<crater_ip>/dev
+  db_dsn: postgres://dev:dev@192.168.5.94:30603/dev
   max_conn_size: 32
 
 weight:

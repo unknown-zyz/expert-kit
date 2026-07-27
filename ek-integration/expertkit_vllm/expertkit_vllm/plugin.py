@@ -21,6 +21,11 @@ def register():
     if os.getenv("EK_ENABLE") != "1":
         return
     if os.getenv("EK_PIPELINE_ENABLE", "0") == "1":
+        if os.getenv("VLLM_USE_V2_MODEL_RUNNER", "0") == "1":
+            raise RuntimeError(
+                "Expert-Kit pipeline requires the legacy v1 GPU model runner; "
+                "set VLLM_USE_V2_MODEL_RUNNER=0"
+            )
         installed_vllm = version("vllm")
         if installed_vllm != "0.25.1":
             raise RuntimeError(

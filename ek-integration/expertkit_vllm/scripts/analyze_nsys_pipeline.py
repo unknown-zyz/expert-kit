@@ -341,13 +341,14 @@ def select_two_layers(calls: list[dict]) -> list[dict]:
         entries.sort(key=lambda call: call["A_envelope"][0])
     candidates = []
     layers = sorted({call["layer_id"] for call in calls})
+    ubatches = sorted({call["microbatch_id"] for call in calls})
     for layer in layers:
         if layer + 1 not in layers:
             continue
         anchors = by_key.get((layer, 0), [])
         for anchor in anchors:
             first = []
-            for ubatch in range(4):
+            for ubatch in ubatches:
                 choices = by_key.get((layer, ubatch), [])
                 if not choices:
                     break
@@ -359,7 +360,7 @@ def select_two_layers(calls: list[dict]) -> list[dict]:
                         ),
                     )
                 )
-            if len(first) != 4:
+            if len(first) != len(ubatches):
                 continue
             second = []
             for call in first:
@@ -373,7 +374,7 @@ def select_two_layers(calls: list[dict]) -> list[dict]:
                 if not choices:
                     break
                 second.append(min(choices, key=lambda item: item["A_envelope"][0]))
-            if len(second) != 4 or len({item["request_id"] for item in second}) != 4:
+            if len(second) != len(ubatches) or len({item["request_id"] for item in second}) != len(ubatches):
                 continue
             selected = first + second
             span = max(item["E2A"][0][1] for item in selected) - min(
@@ -454,8 +455,34 @@ def analyze(sqlite_path: Path) -> dict:
     with sqlite3.connect(sqlite_path) as connection:
         calls = build_calls(connection)
         selected = select_two_layers(calls)
+
+    def duration_ms(call: dict, stage: str) -> float:
+        intervals = call.get(
+            "A_attributed", [call["A_envelope"]]
+        ) if stage == "A" else call[stage]
+        return sum(end - start for start, end in intervals) / 1e6
+
+    all_layer_metrics = {}
+    for layer_id in sorted({call["layer_id"] for call in calls}):
+        layer_calls = [call for call in calls if call["layer_id"] == layer_id]
+        all_layer_metrics[str(layer_id)] = {
+            stage: {
+                "count": len(layer_calls),
+                "mean_ms": (
+                    sum(duration_ms(call, stage) for call in layer_calls)
+                    / len(layer_calls)
+                    if layer_calls
+                    else 0.0
+                ),
+                "total_ms": sum(duration_ms(call, stage) for call in layer_calls),
+            }
+            for stage in ("A", "A2E", "E", "E2A")
+        }
     return {
         "source": str(sqlite_path),
+        "call_count": len(calls),
+        "microbatches": sorted({call["microbatch_id"] for call in calls}),
+        "all_layer_metrics": all_layer_metrics,
         "selected_layers": sorted({call["layer_id"] for call in selected}),
         "calls": selected,
         "metrics": hiding_metrics(selected, calls),
